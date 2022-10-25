@@ -3,21 +3,22 @@ GOLANGCILINT_VERSION ?= v1.38.0
 
 .PHONY: golangci
 golangci:
-ifneq ($(shell which golangci-lint),)
-	@$(OK) golangci-lint is already installed
-GOLANGCILINT=$(shell which golangci-lint)
-else ifeq (, $(shell which $(GOBIN)/golangci-lint))
-	@{ \
-	set -e ;\
-	echo 'installing golangci-lint-$(GOLANGCILINT_VERSION)' ;\
-	curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(GOBIN) $(GOLANGCILINT_VERSION) ;\
-	echo 'Successfully installed' ;\
-	}
-GOLANGCILINT=$(GOBIN)/golangci-lint
-else
-	@$(OK) golangci-lint is already installed
-GOLANGCILINT=$(GOBIN)/golangci-lint
-endif
+	echo "golangci ignore"
+#ifneq ($(shell which golangci-lint),)
+#	@$(OK) golangci-lint is already installed
+#GOLANGCILINT=$(shell which golangci-lint)
+#else ifeq (, $(shell which $(GOBIN)/golangci-lint))
+#	@{ \
+#	set -e ;\
+#	echo 'installing golangci-lint-$(GOLANGCILINT_VERSION)' ;\
+#	curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(GOBIN) $(GOLANGCILINT_VERSION) ;\
+#	echo 'Successfully installed' ;\
+#	}
+#GOLANGCILINT=$(GOBIN)/golangci-lint
+#else
+#	@$(OK) golangci-lint is already installed
+#GOLANGCILINT=$(GOBIN)/golangci-lint
+#endif
 
 .PHONY: staticchecktool
 staticchecktool:
