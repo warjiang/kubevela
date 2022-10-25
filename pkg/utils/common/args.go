@@ -46,14 +46,18 @@ type Args struct {
 
 // SetConfig insert kubeconfig into Args
 func (a *Args) SetConfig(c *rest.Config) error {
+	// 如果config已经存在，直接赋值后返回
 	if c != nil {
 		a.config = c
 		return nil
 	}
+	// 调用client-go的config包获取config
+	// 本地存在多个kubeconfig的情况可以通过export KUBECONFIG=/path/to/kubeconfig来指定
 	restConf, err := config.GetConfig()
 	if err != nil {
 		return err
 	}
+	// 设置QPS:100 和Burst:200
 	restConf.RateLimiter = flowcontrol.NewTokenBucketRateLimiter(100, 200)
 	a.config = restConf
 	return nil
@@ -77,14 +81,19 @@ func (a *Args) SetClient(c client.Client) {
 
 // GetClient get client if exist
 func (a *Args) GetClient() (client.Client, error) {
+	// 当前对象上存在 client-go 对象直接返回
 	if a.client != nil {
 		return a.client, nil
 	}
+	// 如果之前没有获取过kubeconfig则强制获取一个新的kubeconfig
 	if a.config == nil {
 		if err := a.SetConfig(nil); err != nil {
 			return nil, err
 		}
 	}
+	// 到这一步一定能拿到一个合法的kubeconfig
+	// 根据kubeconfig创建client-go对象
+	// a.Schema 为自定义CRDs对象scheme, 具体参考 common.Scheme
 	newClient, err := client.New(a.config, client.Options{Scheme: a.Schema})
 	if err != nil {
 		return nil, err

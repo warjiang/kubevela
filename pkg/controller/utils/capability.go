@@ -644,9 +644,26 @@ func (def *CapabilityBaseDefinition) CreateOrUpdateConfigMap(ctx context.Context
 	definitionName, definitionType string, labels map[string]string, appliedWorkloads []string, jsonSchema []byte, ownerReferences []metav1.OwnerReference) (string, error) {
 	cmName := fmt.Sprintf("%s-%s%s", definitionType, types.CapabilityConfigMapNamePrefix, definitionName)
 	var cm v1.ConfigMap
+	/*
+		data ->
+		{
+			openapi-v3-json-schema: ${jsonSchema}
+		}
+	*/
 	var data = map[string]string{
 		types.OpenapiV3JSONSchema: string(jsonSchema),
 	}
+	/*
+		labels ->
+		{
+			"definition.oam.dev": "schema",
+			"definition.oam.dev/name": "${definitionName}",
+		}
+		annotations ->
+		{
+			"definition.oam.dev/appliedWorkloads": "${appliedWorkloads.join(",")}"
+		}
+	*/
 	if labels == nil {
 		labels = make(map[string]string)
 	}
@@ -659,8 +676,10 @@ func (def *CapabilityBaseDefinition) CreateOrUpdateConfigMap(ctx context.Context
 
 	// No need to check the existence of namespace, if it doesn't exist, API server will return the error message
 	// before it's to be reconciled by ComponentDefinition/TraitDefinition controller.
+	// 根据namespace + cmName 查找关联的 configmap
 	err := k8sClient.Get(ctx, client.ObjectKey{Namespace: namespace, Name: cmName}, &cm)
 	if err != nil && apierrors.IsNotFound(err) {
+		// 不存在创建
 		cm = v1.ConfigMap{
 			TypeMeta: metav1.TypeMeta{
 				APIVersion: "v1",
@@ -683,6 +702,7 @@ func (def *CapabilityBaseDefinition) CreateOrUpdateConfigMap(ctx context.Context
 		return cmName, nil
 	}
 
+	// 如果没有返回错误，说明存在，更新
 	cm.Data = data
 	cm.Labels = labels
 	cm.Annotations = annotations

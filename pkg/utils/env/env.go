@@ -108,9 +108,11 @@ func CreateEnv(envArgs *types.EnvMeta) error {
 
 // GetEnvByName will get env info by name
 func GetEnvByName(name string) (*types.EnvMeta, error) {
+	// env == "default" 情况下，应该是表示的是 env="default", k8s对应的namespace也是"default"
 	if name == DefaultEnvNamespace {
 		return &types.EnvMeta{Name: DefaultEnvNamespace, Namespace: DefaultEnvNamespace}, nil
 	}
+	// 根据label标签获取 "namespace.oam.dev/env"="${name}" 的namespace资源
 	namespace, err := getEnvNamespaceByName(name)
 	if err != nil {
 		return nil, err
@@ -211,6 +213,7 @@ func GetCurrentEnv() (*types.EnvMeta, error) {
 	if err != nil {
 		return nil, err
 	}
+	// 读取 ${velaHomeDir}/curenv
 	data, err := os.ReadFile(filepath.Clean(currentEnvPath))
 	if err != nil {
 		return nil, err
@@ -218,6 +221,7 @@ func GetCurrentEnv() (*types.EnvMeta, error) {
 	var envMeta types.EnvMeta
 	err = json.Unmarshal(data, &envMeta)
 	if err != nil {
+		// 从文件反序列化失败，则curenv中保存的可能是一个namespace信息，尝试从namespace中获取env信息
 		em, err := GetEnvByName(string(data))
 		if err != nil {
 			return nil, err
@@ -225,11 +229,14 @@ func GetCurrentEnv() (*types.EnvMeta, error) {
 		_ = SetCurrentEnv(em)
 		return em, nil
 	}
+	// 直接返回从文件反序列化出来的结果
 	return &envMeta, nil
 }
 
 // SetCurrentEnv will set the current env to the specified one
 func SetCurrentEnv(meta *types.EnvMeta) error {
+	// 将meta数据作json序列化之后
+	// 回写json到 ${velaHomeDir}/curenv 文件下
 	currentEnvPath, err := system.GetCurrentEnvPath()
 	if err != nil {
 		return err
@@ -253,6 +260,7 @@ func getEnvNamespaceByName(name string) (*v1.Namespace, error) {
 	}
 	ctx := context.Background()
 	var nsList v1.NamespaceList
+	// -l "namespace.oam.dev/env"="${name}"
 	err = clt.List(ctx, &nsList, client.MatchingLabels{oam.LabelNamespaceOfEnvName: name})
 	if err != nil {
 		return nil, err

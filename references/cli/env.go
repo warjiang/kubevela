@@ -18,7 +18,6 @@ package cli
 
 import (
 	"fmt"
-
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 
@@ -232,23 +231,28 @@ func SetEnv(envArgs *types.EnvMeta, args []string, ioStreams cmdutil.IOStreams) 
 // GetFlagEnvOrCurrent gets environment by name or current environment
 // if no env exists, return default namespace as env
 func GetFlagEnvOrCurrent(cmd *cobra.Command, args common.Args) (*types.EnvMeta, error) {
+	// 利用 args.GetClient 方法初始化获取 client-go 对象
 	clt, err := args.GetClient()
 	if err != nil {
 		return nil, err
 	}
+	// 全局共享 client-go 对象
 	err = common.SetGlobalClient(clt)
 	if err != nil {
 		return nil, errors.Wrap(err, "get flag env fail")
 	}
 	var envName string
+	// cobra 环境下通过解析 --env 或者 -e 参数
 	if cmd != nil {
 		envName = cmd.Flag("env").Value.String()
 	}
 	if envName != "" {
 		return env.GetEnvByName(envName)
 	}
+	// 尝试从${velaHome}/curenv中获取当前环境
 	cur, err := env.GetCurrentEnv()
 	if err != nil {
+		// 获取环境失败，返回默认环境
 		// ignore this error and return a default value
 		// nolint:nilerr
 		return &types.EnvMeta{Name: "", Namespace: "default"}, nil

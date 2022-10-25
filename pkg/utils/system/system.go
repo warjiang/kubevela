@@ -37,6 +37,9 @@ const (
 
 // GetVelaHomeDir return vela home dir
 func GetVelaHomeDir() (string, error) {
+	// 获取 vela homeDir 按照如下顺序：
+	// 1. 通过环境变量 VELA_HOME 指定
+	// 2. 通过${HOME}/.vela
 	var velaHome string
 	if custom := os.Getenv(VelaHomeEnv); custom != "" {
 		velaHome = custom
@@ -47,6 +50,7 @@ func GetVelaHomeDir() (string, error) {
 		}
 		velaHome = filepath.Join(home, defaultVelaHome)
 	}
+	// 修正 vela homeDir 权限为 0750
 	if _, err := os.Stat(velaHome); err != nil && os.IsNotExist(err) {
 		err := os.MkdirAll(velaHome, 0750)
 		if err != nil {
@@ -94,10 +98,12 @@ func GetCapabilityDir() (string, error) {
 
 // GetCurrentEnvPath return current env config
 func GetCurrentEnvPath() (string, error) {
+	// 获取 velaHomeDir
 	homedir, err := GetVelaHomeDir()
 	if err != nil {
 		return "", err
 	}
+	// 生成 ${velaHomeDir}/curenv 路径
 	envPath := filepath.Join(homedir, "curenv")
 	return envPath, nil
 }

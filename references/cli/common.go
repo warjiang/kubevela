@@ -63,6 +63,7 @@ func addNamespaceAndEnvArg(cmd *cobra.Command) {
 
 // GetFlagNamespaceOrEnv will get env and namespace flag, namespace flag takes the priority
 func GetFlagNamespaceOrEnv(cmd *cobra.Command, args common.Args) (string, error) {
+	// 获取用户从命令行中指定--namespace或者-n的参数
 	namespace, err := cmd.Flags().GetString(Namespace)
 	if err != nil {
 		return "", err
