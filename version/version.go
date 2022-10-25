@@ -26,6 +26,7 @@ var VelaVersion = "UNKNOWN"
 
 // IsOfficialKubeVelaVersion checks whether the provided version string follows a KubeVela version pattern
 func IsOfficialKubeVelaVersion(versionStr string) bool {
+	// 检查 versionStr 是否为官方版本（检查是否为 semver ）
 	_, err := version.NewSemver(versionStr)
 	return err == nil
 }

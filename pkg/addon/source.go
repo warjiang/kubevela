@@ -149,6 +149,15 @@ type SourceMeta struct {
 
 // ClassifyItemByPattern will filter and classify addon data, data will be classified by pattern it meets
 func ClassifyItemByPattern(meta *SourceMeta, r AsyncReader) map[string][]Item {
+	// 对meta中的items进行分类, meta下的每个item通过GetPatternFromItem会得到一个映射的pattern
+	// 返回结果按照pattern进行分组
+	/*
+		// 比如
+		{
+			"pattern1": [item1, item2],
+			"pattern1": [item1, item2],
+		}
+	*/
 	var p = make(map[string][]Item)
 	for _, it := range meta.Items {
 		pt := GetPatternFromItem(it, r, meta.Name)

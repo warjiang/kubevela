@@ -159,14 +159,16 @@ func (a *Args) GetPackageDiscover() (*packages.PackageDiscover, error) {
 
 // GetDiscoveryClient return a discovery client from cli args
 func (a *Args) GetDiscoveryClient() (*discovery.DiscoveryClient, error) {
+	// 当前对象上已经初始化过discoveryClient直接返回
 	if a.dc != nil {
 		return a.dc, nil
 	}
+	// 获取 kubeconfig
 	cfg, err := a.GetConfig()
 	if err != nil {
 		return nil, err
 	}
-
+	// 根据 kubeconfig 初始化 discoveryClient
 	dc, err := discovery.NewDiscoveryClientForConfig(cfg)
 	if err != nil {
 		return nil, err

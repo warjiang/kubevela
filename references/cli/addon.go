@@ -91,7 +91,9 @@ func NewAddonCommand(c common.Args, order string, ioStreams cmdutil.IOStreams) *
 		},
 	}
 	cmd.AddCommand(
+		// vela addon ls
 		NewAddonListCommand(c),
+		// vela addon enable <addon-name>
 		NewAddonEnableCommand(c, ioStreams),
 		NewAddonDisableCommand(c, ioStreams),
 		NewAddonStatusCommand(c, ioStreams),
@@ -145,10 +147,13 @@ func NewAddonEnableCommand(c common.Args, ioStream cmdutil.IOStreams) *cobra.Com
 	vela addon enable <addon-name> <my-parameter-of-addon>=<my-value>
 `,
 		RunE: func(cmd *cobra.Command, args []string) error {
-
+			// args[0]一定是addon名字或者addon本地路径，不存在的话会报错
 			if len(args) < 1 {
 				return fmt.Errorf("must specify addon name")
 			}
+			// cobra 关联 flags --version、--clusters、--skip-version-validating、--override-definitions
+			// 其余参数必须要按照 key1=value1 key2=value2 的格式传入
+			// args[1:] 其实就是 [key1=value1,key2=value2,key3={x,y,z}], 这里解析成map
 			addonArgs, err := parseAddonArgsToMap(args[1:])
 			if err != nil {
 				return err
@@ -172,11 +177,15 @@ func NewAddonEnableCommand(c common.Args, ioStream cmdutil.IOStreams) *cobra.Com
 			addonOrDir := args[0]
 			var name = addonOrDir
 			if file, err := os.Stat(addonOrDir); err == nil {
+				// 如果 os.Stat(addonOrDir) 没有报错，说明addonOrDir是一个本地路径
+				// 执行本地安装逻辑
 				if !file.IsDir() {
 					return fmt.Errorf("%s is not addon dir", addonOrDir)
 				}
 				ioStream.Infof("enable addon by local dir: %s \n", addonOrDir)
 				// args[0] is a local path install with local dir, use base dir name as addonName
+				// abs: addon绝对路径
+				// name: 从abs中可以提取出addon的名字
 				abs, err := filepath.Abs(addonOrDir)
 				if err != nil {
 					return errors.Wrapf(err, "directory %s is invalid", addonOrDir)
@@ -574,9 +583,11 @@ func enableAddon(ctx context.Context, k8sClient client.Client, dc *discovery.Dis
 // enableAddonByLocal enable addon in local dir and return the addon name
 func enableAddonByLocal(ctx context.Context, name string, dir string, k8sClient client.Client, dc *discovery.DiscoveryClient, config *rest.Config, args map[string]interface{}) error {
 	var opts []pkgaddon.InstallOption
+	// --skip-version-validating
 	if skipValidate {
 		opts = append(opts, pkgaddon.SkipValidateVersion)
 	}
+	// --override-definitions
 	if overrideDefs {
 		opts = append(opts, pkgaddon.OverrideDefinitions)
 	}
@@ -1081,6 +1092,8 @@ func hasAddon(addons []*pkgaddon.UIData, name string) bool {
 }
 
 func transClusters(cstr string) []string {
+	// cstr示例比如 --clusters={local,cluster1,cluster2}
+	// 预期返回 []string{local,cluster1,cluster2}
 	if len(cstr) == 0 {
 		return nil
 	}

@@ -103,6 +103,7 @@ func addLastAppliedConfigAnnotation(obj runtime.Object) error {
 	if annots == nil {
 		annots = make(map[string]string)
 	}
+	// "app.oam.dev/last-applied-configuration"
 	annots[oam.AnnotationLastAppliedConfig] = string(config)
 	return metadataAccessor.SetAnnotations(obj, annots)
 }

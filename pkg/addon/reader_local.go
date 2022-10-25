@@ -23,6 +23,7 @@ import (
 	"strings"
 )
 
+// 本地 addon 解析器
 type localReader struct {
 	dir  string
 	name string
@@ -48,11 +49,49 @@ func (l localReader) ReadFile(path string) (string, error) {
 }
 
 func (l localReader) RelativePath(item Item) string {
+	// 计算从 addon 根目录到 item 的相对路径
 	file := strings.TrimPrefix(item.GetPath(), filepath.Clean(l.dir))
+	// 拼接成 ${addonName}/${file相对路径}
 	return filepath.Join(l.name, file)
 }
 
 func recursiveFetchFiles(path string, metas *SourceMeta) error {
+	// 递归遍历 path 目录， 生成结果通过 metas 参数传递
+	/*
+		addons/velaux
+		├── metadata.yaml
+		├── parameter.cue
+		├── resources
+		│		├── apiserver.cue
+		│		└── velaux.cue
+		针对上面截取出来的目录结构, 生成的 metas 结果如下：
+		{
+			dir: "/addons/velaux/"
+			name: "velaux",
+			Items: []Items{
+				OSSItem{
+					tp: "file",
+					path: "/addons/velaux/metadata.yaml",
+					name: "metadata.yaml"
+				},
+				OSSItem{
+					tp: "file",
+					path: "/addons/velaux/parameter.cue",
+					name: "parameter.cue"
+				},
+				OSSItem{
+					tp: "file",
+					path: "/addons/velaux/resources/apiserver.cue",
+					name: "apiserver.cue"
+				},
+				OSSItem{
+					tp: "file",
+					path: "/addons/velaux/resources/velaux.cue",
+					name: "velaux.cue"
+				},
+			}
+		}
+	*/
 	files, err := ioutil.ReadDir(path)
 	if err != nil {
 		return err

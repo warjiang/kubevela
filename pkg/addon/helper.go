@@ -95,6 +95,8 @@ func DisableAddon(ctx context.Context, cli client.Client, name string, config *r
 
 // EnableAddonByLocalDir enable an addon from local dir
 func EnableAddonByLocalDir(ctx context.Context, name string, dir string, cli client.Client, dc *discovery.DiscoveryClient, applicator apply.Applicator, config *rest.Config, args map[string]interface{}, opts ...InstallOption) error {
+	// dir 就是 addon 的路径
+	// absDir 获取addon绝对路径
 	absDir, err := filepath.Abs(dir)
 	if err != nil {
 		return err

@@ -244,6 +244,7 @@ func renderCompAccordingCUETemplate(cueTemplate ElementFile, addon *InstallPacka
 
 // RenderApp render a K8s application
 func RenderApp(ctx context.Context, addon *InstallPackage, k8sClient client.Client, args map[string]interface{}) (*v1beta1.Application, []*unstructured.Unstructured, error) {
+	// unify args 字段
 	if args == nil {
 		args = map[string]interface{}{}
 	}
