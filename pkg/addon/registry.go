@@ -63,6 +63,19 @@ type registryImpl struct {
 }
 
 func (r registryImpl) ListRegistries(ctx context.Context) ([]Registry, error) {
+	// 获取 "vela-system" 下的 "vela-addon-registry" 的 configmap
+	// kubectl get cm/vela-addon-registry -n vela-system -oyaml
+	/*
+		data:
+		  registries: '{
+				"KubeVela":{
+					"name": "KubeVela",
+					"helm": {
+						"url": "https://addons.kubevela.net"
+					}
+				}
+		}'
+	*/
 	cm := &v1.ConfigMap{}
 	if err := r.client.Get(ctx, types.NamespacedName{Namespace: velatypes.DefaultKubeVelaNS, Name: registryConfigMapName}, cm); err != nil {
 		return nil, err

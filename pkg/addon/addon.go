@@ -867,6 +867,9 @@ func RenderArgsSecret(addon *InstallPackage, args map[string]interface{}) *unstr
 
 // FetchArgsFromSecret fetch addon args from secrets
 func FetchArgsFromSecret(sec *v1.Secret) (map[string]interface{}, error) {
+	// addon的参数以secret形式存储
+	// 新版本的secret可以为addonParameterDataKey, 值为具体的参数
+	// 旧版本的secret直接按照k-v的形式存储在secret中
 	res := map[string]interface{}{}
 	if args, ok := sec.Data[AddonParameterDataKey]; ok {
 		err := json.Unmarshal(args, &res)
@@ -1230,6 +1233,9 @@ func determineAddonAppName(ctx context.Context, cli client.Client, addonName str
 
 // FetchAddonRelatedApp will fetch the addon related app, this func will use NamespacedName(vela-system, addon-addonName) to get app
 // if not find will try to get 1.1 legacy addon related app by using NamespacedName(vela-system, `addonName`)
+// 获取addon关联的app
+// 1.1 之前的版本 name={addonName} 		 namespace=vela-system
+// 1.1 之后的版本 name=addon-{addonName}   namespace=vela-system
 func FetchAddonRelatedApp(ctx context.Context, cli client.Client, addonName string) (*v1beta1.Application, error) {
 	app := &v1beta1.Application{}
 	if err := cli.Get(ctx, types2.NamespacedName{Namespace: types.DefaultKubeVelaNS, Name: addonutil.Addon2AppName(addonName)}, app); err != nil {

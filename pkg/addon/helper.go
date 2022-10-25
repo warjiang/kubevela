@@ -162,6 +162,7 @@ func GetAddonStatus(ctx context.Context, cli client.Client, name string) (Status
 	}
 
 	// Get addon parameters
+	// secret资源 name=addon-secret-{addonName} namespace=vela-system
 	var sec v1.Secret
 	err = cli.Get(ctx, client.ObjectKey{Namespace: types.DefaultKubeVelaNS, Name: addonutil.Addon2SecName(name)}, &sec)
 	if err != nil {

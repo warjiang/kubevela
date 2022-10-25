@@ -893,14 +893,16 @@ func listAddons(ctx context.Context, clt client.Client, registry string) (*uitab
 	if err != nil {
 		return nil, err
 	}
-
+	// 根据cm里面存储的registry，获取对应的addon保存到addons列表中
 	for _, r := range registries {
 		if registry != "" && r.Name != registry {
 			continue
 		}
 		var addonList []*pkgaddon.UIData
 		var err error
+		// 通过r的helm字段是否为空来判断是否支持多版本的addon
 		if !pkgaddon.IsVersionRegistry(r) {
+			// 普通 registry 仓库
 			meta, err := r.ListAddonMeta()
 			if err != nil {
 				continue
@@ -910,6 +912,7 @@ func listAddons(ctx context.Context, clt client.Client, registry string) (*uitab
 				continue
 			}
 		} else {
+			// helm 支持的多版本仓库
 			versionedRegistry := pkgaddon.BuildVersionedRegistry(r.Name, r.Helm.URL, &common.HTTPOption{
 				Username:        r.Helm.Username,
 				Password:        r.Helm.Password,
@@ -929,6 +932,10 @@ func listAddons(ctx context.Context, clt client.Client, registry string) (*uitab
 	// get locally installed addons first
 	locallyInstalledAddons := map[string]bool{}
 	appList := v1beta1.ApplicationList{}
+	// 根据label为 "addons.oam.dev/registry"="local" 条件获取全部的 application
+	// kubectl get velaapp -l addons.oam.dev/registry=local -A
+	// 这里velaapp是application的别名，也可以用application或者app
+	// 将系统中已经安装的addon直接写到table中
 	if err := clt.List(ctx, &appList, client.MatchingLabels{oam.LabelAddonRegistry: pkgaddon.LocalAddonRegistryName}); err != nil {
 		return table, err
 	}
@@ -939,7 +946,7 @@ func listAddons(ctx context.Context, clt client.Client, registry string) (*uitab
 		table.AddRow(addonName, app.GetLabels()[oam.LabelAddonRegistry], "", genAvailableVersionInfo([]string{addonVersion}, addonVersion, 3), statusEnabled)
 		locallyInstalledAddons[addonName] = true
 	}
-
+	// 将前面从不同registry中获取的addon写入到table中
 	for _, addon := range addons {
 		// if the addon with same name has already installed locally, display the registry one as not installed
 		if locallyInstalledAddons[addon.Name] {
@@ -1000,6 +1007,7 @@ func waitApplicationRunning(k8sClient client.Client, addonName string) error {
 // generate the available version
 // this func put the installed version as the first version and keep the origin order
 // print ... if available version too much
+// versions 会格式化成 [v1,v2,v3]的形式, 长度通过limit去限制, installedVersion会被放到第一位, 并做高亮
 func genAvailableVersionInfo(versions []string, installedVersion string, limit int) string {
 	var v []string
 
@@ -1052,6 +1060,7 @@ func TransAddonName(name string) string {
 	return strings.ReplaceAll(name, "/", "-")
 }
 
+// 对pkgaddon.UIData做去重
 func mergeAddons(a1, a2 []*pkgaddon.UIData) []*pkgaddon.UIData {
 	for _, item := range a2 {
 		if hasAddon(a1, item.Name) {
