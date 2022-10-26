@@ -1248,10 +1248,10 @@ func (h *Installer) createOrUpdate(app *v1beta1.Application) error {
 }
 
 func (h *Installer) dispatchAddonResource(addon *InstallPackage) error {
-	//prettyPrint := func(d interface{}) {
-	//	indent, _ := json.MarshalIndent(d, "", "  ")
-	//	fmt.Println(string(indent))
-	//}
+	prettyPrint := func(d interface{}) {
+		indent, _ := json.MarshalIndent(d, "", "  ")
+		fmt.Println(string(indent))
+	}
 	// 渲染 addon 的cue模板
 	app, auxiliaryOutputs, err := RenderApp(h.ctx, addon, h.cli, h.args)
 	/*
@@ -1347,10 +1347,11 @@ func (h *Installer) dispatchAddonResource(addon *InstallPackage) error {
 	if err != nil {
 		return err
 	}
-	app.Name = appName // addon-velaux
+	app.Name = appName // 对于velaux最终生成的name为addon-velaux
 	// 配置label标签
 	// 在原始资源的label上增加一个标签
-	// addons.oam.dev/registry: registry.cn-hangzhou.aliyuncs.com/aliyun/aliyun-ack
+	// 以 velaux 这个 addon为例, 会生成如下label标签
+	// addons.oam.dev/registry: https://addons.kubevela.net
 	app.SetLabels(util.MergeMapOverrideWithDst(app.GetLabels(), map[string]string{oam.LabelAddonRegistry: h.r.Name}))
 
 	defs, err := RenderDefinitions(addon, h.config)
@@ -1515,7 +1516,7 @@ func (h *Installer) dispatchAddonResource(addon *InstallPackage) error {
 	if err != nil {
 		return errors.Wrap(err, "render addon views fail")
 	}
-	//prettyPrint(views)
+	prettyPrint(views)
 
 	if err := passDefInAppAnnotation(defs, app); err != nil {
 		return errors.Wrapf(err, "cannot pass definition to addon app's annotation")

@@ -57,7 +57,7 @@ type addonCueTemplateRender struct {
 }
 
 func (a addonCueTemplateRender) formatContext() (string, error) {
-	args := a.inputArgs
+	args := a.inputArgs // unify args参数, 防止inputArgs为nil情况
 	if args == nil {
 		args = map[string]interface{}{}
 	}
@@ -66,8 +66,65 @@ func (a addonCueTemplateRender) formatContext() (string, error) {
 		return "", err
 	}
 	paramFile := fmt.Sprintf("%s: %s", cuemodel.ParameterFieldName, string(bt))
-
+	// paramFile => parameter: {}
 	var contextFile = strings.Builder{}
+	/*
+		# contextFile 拼接出来的结果如下(对meta.context的value进行了格式化,效果没差别):
+		# 这里是不是直接用go template更好一些
+		parameter: {
+			// +usage=Specify the image hub of velaux, eg. "acr.kubevela.net"
+			repo?: string
+			// +usage=Specify the database type, current support KubeAPI(default) and MongoDB.
+			dbType: *"kubeapi" | "mongodb"
+			// +usage=Specify the database name, for the kubeapi db type, it represents namespace.
+			database?: string
+			// +usage=Specify the MongoDB URL. it only enabled where DB type is MongoDB.
+			dbURL?: string
+			// +usage=Specify the domain, if set, ingress will be created if the gateway driver is nginx.
+			domain?: string
+			// +usage=Specify the name of the certificate cecret, if set, means enable the HTTPs.
+			secretName?: string
+			// +usage=Specify the gateway type.
+			gatewayDriver: *"nginx" | "traefik"
+			// +usage=Specify the serviceAccountName for apiserver
+			serviceAccountName: *"kubevela-vela-core" | string
+			// +usage=Specify the service type.
+			serviceType: *"ClusterIP" | "NodePort" | "LoadBalancer"
+			// +usage=Specify the names of imagePullSecret for private image registry, eg. "{a,b,c}"
+			imagePullSecrets?: [...string]
+			// +usage=Specify whether to enable the dex
+			dex: *false | bool
+			// +usage=Specify the replicas.
+			replicas: *1 | int
+			// +usage=Specify nodeport. This will be ignored if serviceType is not NodePort.
+			nodePort: *30000 | int
+		}
+		context: {
+			metadata: {
+				"name":"velaux",
+				"version":"v1.5.8",
+				"description":"KubeVela User Experience (UX). An extensible, application-oriented delivery and management Dashboard.",
+				"icon":"https://static.kubevela.net/images/logos/KubeVela%20-03.png",
+				"url":"https://kubevela.io",
+				"tags":["Official"],
+				"deployTo":{
+					"disableControlPlane":false,
+					"runtimeCluster":false
+				},
+				"invisible":false,
+				"system":{
+					"vela":">=v1.5.0"
+				}
+			}
+		}
+		// 如果用户未启用自定义参数, 则这里的parameter为空对象
+		parameter: {}
+		// 如果用户启用了自定义参数, 形式为基础命令+foo=bar的形式(比如vela addon enable velaux serviceType=NodePort a=b), 则这里的parameter为用户自定义的参数
+		parameter: {
+			"a":"b",
+			"serviceType":"NodePort"
+		}
+	*/
 	// user custom parameter but be the first data and generated data should be appended at last
 	// in case the user defined data has packages
 	contextFile.WriteString(a.addon.Parameters + "\n")
@@ -111,7 +168,17 @@ func (a addonCueTemplateRender) renderApp() (*v1beta1.Application, []*unstructur
 	var app v1beta1.Application
 	var outputs = map[string]interface{}{}
 	var res []*unstructured.Unstructured
+	/*
+		cuetextFile 实际上是一个内存中拼接好的字符串
+			parameter: {parameter.cue中内容}
+			context: {
+				meta: {metadata.yaml中内容}
+			}
+			parameter: {
+				// 用户从命令行中传递回来的自定义参数
+			}
 
+	*/
 	contextFile, err := a.formatContext()
 	if err != nil {
 		return nil, nil, errors.Wrap(err, "format context for app render")
@@ -121,6 +188,7 @@ func (a addonCueTemplateRender) renderApp() (*v1beta1.Application, []*unstructur
 		return nil, nil, errors.Wrap(err, "parse parameter context")
 	}
 	if contextCue.PackageName() == "" {
+		// contextFile 如没有没有 package name, 则默认在开头补上 package main
 		contextFile = value.DefaultPackageHeader + contextFile
 	}
 
@@ -134,6 +202,7 @@ func (a addonCueTemplateRender) renderApp() (*v1beta1.Application, []*unstructur
 	if err != nil {
 		return nil, nil, errors.Wrap(err, "load app template with CUE files")
 	}
+	// v.LookupValue("output")
 	outputContent, err := v.LookupValue(renderOutputCuePath)
 	if err != nil {
 		return nil, nil, errors.Wrap(err, "render app from output field from CUE")
@@ -142,6 +211,7 @@ func (a addonCueTemplateRender) renderApp() (*v1beta1.Application, []*unstructur
 	if err != nil {
 		return nil, nil, errors.Wrap(err, "decode app from CUE")
 	}
+	// v.LookupValue("outputs")
 	auxiliaryContent, err := v.LookupValue(renderAuxiliaryOutputsPath)
 	if err != nil {
 		// no outputs defined in app template, return normal data
@@ -167,14 +237,14 @@ func (a addonCueTemplateRender) renderApp() (*v1beta1.Application, []*unstructur
 
 // generateAppFramework generate application from yaml defined by template.yaml or cue file from template.cue
 func generateAppFramework(addon *InstallPackage, parameters map[string]interface{}) (*v1beta1.Application, []*unstructured.Unstructured, error) {
-	if len(addon.AppCueTemplate.Data) != 0 && addon.AppTemplate != nil {
+	if len(addon.AppCueTemplate.Data) != 0 && addon.AppTemplate != nil { // 不能同时支持cue和yaml梁总类型的模板
 		return nil, nil, ErrBothCueAndYamlTmpl
 	}
 
 	var app *v1beta1.Application
 	var auxiliaryObjects []*unstructured.Unstructured
 	var err error
-	if len(addon.AppCueTemplate.Data) != 0 {
+	if len(addon.AppCueTemplate.Data) != 0 { // 走cue模板渲染
 		app, auxiliaryObjects, err = renderAppAccordingToCueTemplate(addon, parameters)
 		if err != nil {
 			return nil, nil, err
@@ -205,8 +275,8 @@ func generateAppFramework(addon *InstallPackage, parameters map[string]interface
 	if app.Labels == nil {
 		app.Labels = make(map[string]string)
 	}
-	app.Labels[oam.LabelAddonName] = addon.Name
-	app.Labels[oam.LabelAddonVersion] = addon.Version
+	app.Labels[oam.LabelAddonName] = addon.Name       // velaux
+	app.Labels[oam.LabelAddonVersion] = addon.Version // 1.5.8
 
 	for _, aux := range auxiliaryObjects {
 		aux.SetLabels(util.MergeMapOverrideWithDst(aux.GetLabels(), map[string]string{oam.LabelAddonName: addon.Name, oam.LabelAddonVersion: addon.Version}))
@@ -216,11 +286,11 @@ func generateAppFramework(addon *InstallPackage, parameters map[string]interface
 }
 
 func renderAppAccordingToCueTemplate(addon *InstallPackage, args map[string]interface{}) (*v1beta1.Application, []*unstructured.Unstructured, error) {
-	r := addonCueTemplateRender{
+	r := addonCueTemplateRender{ // 构造render
 		addon:     addon,
 		inputArgs: args,
 	}
-	return r.renderApp()
+	return r.renderApp() // 调用renderApp，渲染cue模板
 }
 
 // renderCompAccordingCUETemplate will return a component from cue template
@@ -252,6 +322,7 @@ func RenderApp(ctx context.Context, addon *InstallPackage, k8sClient client.Clie
 	if err != nil {
 		return nil, nil, err
 	}
+	// 如果addon中标记了needNamespace，会把创建ns的yaml内容以unstructured.Unstructured形式插入到app.Spec.Components中
 	app.Spec.Components = append(app.Spec.Components, renderNeededNamespaceAsComps(addon)...)
 
 	resources, err := renderResources(addon, args)
