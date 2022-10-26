@@ -295,6 +295,8 @@ func GetDefinitionNamespaceWithCtx(ctx context.Context) string {
 // Sometimes webhook handler may receive request that appNs is empty string, and will cause error when search definition
 // So if namespace is empty, it will use `default` namespace by default.
 func SetNamespaceInCtx(ctx context.Context, namespace string) context.Context {
+	// 在ctx上面设置 AppDefinitionNamespace={namespace}
+	// 如果传入的namespace为空，则设置为default
 	if namespace == "" {
 		// compatible with some webhook handlers that maybe receive empty string as app namespace which means `default` namespace
 		namespace = "default"

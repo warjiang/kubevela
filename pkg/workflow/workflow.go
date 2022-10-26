@@ -103,27 +103,32 @@ func NewWorkflow(app *oamcore.Application, cli client.Client, mode common.Workfl
 // style rev <rev>:<hash> will be recognized and <rev> will be compared to
 // revName
 func needRestart(app *oamcore.Application, revName string) bool {
-	if app.Status.Workflow == nil {
+	if app.Status.Workflow == nil { // 条件1 初始化冷启动的时候需要重启
 		return true
 	}
 	if metav1.HasAnnotation(app.ObjectMeta, oam.AnnotationPublishVersion) {
+		// 存在 "app.oam.dev/publishVersion" 注解
+		// 判断 application.Annotations["app.oam.dev/publishVersion"] == app.Status.Workflow.Revision
+		// 不相等重启
 		return app.Status.Workflow.AppRevision != app.GetAnnotations()[oam.AnnotationPublishVersion]
 	}
 	current := app.Status.Workflow.AppRevision
 	if idx := strings.LastIndexAny(current, ":"); idx >= 0 {
 		current = current[:idx]
 	}
+	// rev name不相等重启
 	return current != revName
 }
 
 // ExecuteSteps process workflow step in order.
 func (w *workflow) ExecuteSteps(ctx monitorContext.Context, appRev *oamcore.ApplicationRevision, taskRunners []wfTypes.TaskRunner) (common.WorkflowState, error) {
+	// {rev}:{hash}
 	revAndSpecHash, err := ComputeWorkflowRevisionHash(appRev.Name, w.app)
 	if err != nil {
 		return common.WorkflowStateExecuting, err
 	}
 	ctx.AddTag("workflow_version", revAndSpecHash)
-	if len(taskRunners) == 0 {
+	if len(taskRunners) == 0 { // 没任务了,wf完成
 		return common.WorkflowStateFinished, nil
 	}
 
@@ -219,6 +224,7 @@ func checkWorkflowSuspended(wfStatus *common.WorkflowStatus) bool {
 }
 
 func (w *workflow) restartWorkflow(ctx monitorContext.Context, rev string) (common.WorkflowState, error) {
+	// restart workflow 之后只有两种可能性 WorkflowStateTerminated 和 WorkflowStateInitializing
 	ctx.Info("Restart Workflow")
 	status := w.app.Status.Workflow
 	if status != nil && !status.Finished {
@@ -847,13 +853,17 @@ func (e *engine) needStop() bool {
 func ComputeWorkflowRevisionHash(rev string, app *oamcore.Application) (string, error) {
 	version := ""
 	if annos := app.Annotations; annos != nil {
+		// 优先从application.Annotations中获取"app.oam.dev/publishVersion"
 		version = annos[oam.AnnotationPublishVersion]
 	}
+	// application中没有成功取到version
 	if version == "" {
+		// 根据application.Spec字段计算hash值
 		specHash, err := utils.ComputeSpecHash(app.Spec)
 		if err != nil {
 			return "", err
 		}
+		// {rev}:{specHash} 拼接成对应 version
 		version = fmt.Sprintf("%s:%s", rev, specHash)
 	}
 	return version, nil

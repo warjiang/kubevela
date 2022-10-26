@@ -30,6 +30,7 @@ func SetCluster(o client.Object, clusterName string) {
 
 // GetCluster get cluster from object
 func GetCluster(o client.Object) string {
+	// 从runtime.Object中获取解析出label对象，获取"app.oam.dev/cluster"对应的值也就是cluster信息
 	if labels := o.GetLabels(); labels != nil {
 		return labels[LabelAppCluster]
 	}

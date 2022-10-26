@@ -136,6 +136,7 @@ func (h *AppHandler) addAppliedResource(previous bool, refs ...common.ClusterObj
 	defer h.mu.Unlock()
 	for _, ref := range refs {
 		if previous {
+			// previous=true的情况下, 如果在h.deletedResources中找到对应的ref资源则删除
 			for i, deleted := range h.deletedResources {
 				if deleted.Equal(ref) {
 					h.deletedResources = removeResources(h.deletedResources, i)
@@ -144,6 +145,7 @@ func (h *AppHandler) addAppliedResource(previous bool, refs ...common.ClusterObj
 			}
 		}
 
+		// h.appliedResources中如果不存在ref资源追加写入
 		found := false
 		for _, current := range h.appliedResources {
 			if current.Equal(ref) {
@@ -182,6 +184,14 @@ func (h *AppHandler) deleteAppliedResource(ref common.ClusterObjectReference) {
 }
 
 func removeResources(elements []common.ClusterObjectReference, index int) []common.ClusterObjectReference {
+	/*
+		删除数组elements中index位置的元素, 实现思路, 交换elements[i]和elements[{last}-1]
+		最后通过取elements[:{last}]的方式删除最后一个元素
+		输入: elements = [a,b,c,d,e,f,g], index = 2
+		输出: [a,b,d,e,f,g], 删除c
+		交换: c,g => [a,b,g,d,e,f,c]
+		切片: [:len(elements)-1]=> [a,b,g,d,e,f]
+	*/
 	elements[index] = elements[len(elements)-1]
 	return elements[:len(elements)-1]
 }
@@ -189,6 +199,9 @@ func removeResources(elements []common.ClusterObjectReference, index int) []comm
 // addServiceStatus recorde the whole component status.
 // reconcile run at single threaded. So there is no need to consider to use locker.
 func (h *AppHandler) addServiceStatus(cover bool, svcs ...common.ApplicationComponentStatus) {
+	// cover表示从h.services找到相同的svc后是否覆盖
+	// 如果h.services中已经存在相同的svc, 且cover为true则覆盖, 否则不覆盖
+	// 如果h.services中不存在该svc，则追加写入
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	for _, svc := range svcs {
@@ -363,11 +376,20 @@ func (h *AppHandler) ApplyPolicies(ctx context.Context, af *appfile.Appfile) err
 	}
 	if len(policyManifests) > 0 {
 		for _, policyManifest := range policyManifests {
+			/*
+				所有的policy的label上增加
+				{
+					"app.oam.dev/name": "{h.app.GetName()}",
+					"app.oam.dev/namespace": "{h.app.GetNamespace()}",
+				}
+			*/
 			util.AddLabels(policyManifest, map[string]string{
 				oam.LabelAppName:      h.app.GetName(),
 				oam.LabelAppNamespace: h.app.GetNamespace(),
 			})
 		}
+		// common.PolicyResourceCreator => policy
+		// 默认cluster为空，即默认使用当前集群
 		if err = h.Dispatch(ctx, "", common.PolicyResourceCreator, policyManifests...); err != nil {
 			return errors.Wrapf(err, "failed to dispatch policy manifests")
 		}

@@ -85,9 +85,11 @@ func ContextInLocalCluster(ctx context.Context) context.Context {
 
 // ResourcesWithClusterName set cluster name for resources
 func ResourcesWithClusterName(clusterName string, objs ...*unstructured.Unstructured) []*unstructured.Unstructured {
+	// 给所有的unstructured.Unstructured资源对象设置一个app.oam.dev/cluster={clusterName}的标签
 	var _objs []*unstructured.Unstructured
 	for _, obj := range objs {
 		if obj != nil {
+			// 如果runtime.Object的"app.oam.dev/cluster"标签为空, 为其补齐clusterName信息
 			if oam.GetCluster(obj) == "" {
 				oam.SetCluster(obj, clusterName)
 			}

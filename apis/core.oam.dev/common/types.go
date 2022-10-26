@@ -648,6 +648,8 @@ const (
 	ReadyCondition
 )
 
+// parse -> generate revision -> procese policy -> process render -> process workflow -> process rollout -> ready
+
 var conditions = map[ApplicationConditionType]string{
 	ParsedCondition:   "Parsed",
 	RevisionCondition: "Revision",

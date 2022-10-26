@@ -112,6 +112,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 	logCtx.Info("Start reconcile application")
 	defer logCtx.Commit("End reconcile application")
 	app := new(v1beta1.Application)
+	// 根据 namespace/name 查找对应的 application 对象
 	if err := r.Get(ctx, client.ObjectKey{
 		Name:      req.Name,
 		Namespace: req.Namespace,
@@ -133,6 +134,8 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 	logCtx.AddTag("resource_version", app.ResourceVersion).AddTag("generation", app.Generation)
 	ctx = oamutil.SetNamespaceInCtx(ctx, app.Namespace)
 	logCtx.SetContext(ctx)
+	// 取application上的annotation, 为空或者"oam.dev/kubevela-version"对应的value为空的情况下
+	// 设置application的metadata.annotation["oam.dev/kubevela-version"]={version.VelaVersion}
 	if annotations := app.GetAnnotations(); annotations == nil || annotations[oam.AnnotationKubeVelaVersion] == "" {
 		metav1.SetMetaDataAnnotation(&app.ObjectMeta, oam.AnnotationKubeVelaVersion, version.VelaVersion)
 	}
@@ -357,7 +360,10 @@ func (r *Reconciler) result(err error) *reconcileResult {
 // by setting application(namespace-scoped) as their owners.
 // We must delete all resource trackers related to an application through finalizer logic.
 func (r *Reconciler) handleFinalizers(ctx monitorContext.Context, app *v1beta1.Application, handler *AppHandler) (bool, ctrl.Result, error) {
+	// 检查 DeletionTimestamp 以确定对象是否在删除中
 	if app.ObjectMeta.DeletionTimestamp.IsZero() {
+		// 如果当前对象没有 finalizer， 说明其没有处于正被删除的状态。
+		// resourceTrackerFinalizer => "app.oam.dev/resource-tracker-finalizer"
 		if !meta.FinalizerExists(app, resourceTrackerFinalizer) {
 			subCtx := ctx.Fork("handle-finalizers", monitorContext.DurationMetric(func(v float64) {
 				metrics.HandleFinalizersDurationHistogram.WithLabelValues("application", "add").Observe(v)
@@ -369,6 +375,7 @@ func (r *Reconciler) handleFinalizers(ctx monitorContext.Context, app *v1beta1.A
 			return r.result(errors.Wrap(r.Client.Update(ctx, app), errUpdateApplicationFinalizer)).end(endReconcile)
 		}
 	} else {
+		// app对象将要被删除
 		if meta.FinalizerExists(app, resourceTrackerFinalizer) {
 			subCtx := ctx.Fork("handle-finalizers", monitorContext.DurationMetric(func(v float64) {
 				metrics.HandleFinalizersDurationHistogram.WithLabelValues("application", "remove").Observe(v)

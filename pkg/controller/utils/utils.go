@@ -189,6 +189,10 @@ func StoreInSet(disableCaps string) mapset.Set {
 
 // GetAppNextRevision will generate the next revision name and revision number for application
 func GetAppNextRevision(app *v1beta1.Application) (string, int64) {
+	// 根据application对象自动生成revisionName和revisionNumber
+	// status.latestRevision为空情况下, revisionNumber 设置为1
+	// 否则为 revisionNumber = status.latestRevision + 1
+	// revisionName: <appName>-v<revisionNumber>
 	if app == nil {
 		// should never happen
 		return "", 0
@@ -204,6 +208,7 @@ func GetAppNextRevision(app *v1beta1.Application) (string, int64) {
 // ConstructRevisionName will generate a revisionName given the componentName and revision
 // will be <componentName>-v<RevisionNumber>, for example: comp-v1
 func ConstructRevisionName(componentName string, revision int64) string {
+	// 按照 {componentName}-v{revision} 规则生成 revisionName
 	return strings.Join([]string{componentName, fmt.Sprintf("v%d", revision)}, "-")
 }
 
@@ -249,10 +254,12 @@ func CompareWithRevision(ctx context.Context, c client.Client, componentName, na
 // ComputeSpecHash computes the hash value of a k8s resource spec
 func ComputeSpecHash(spec interface{}) (string, error) {
 	// compute a hash value of any resource spec
+	// 根据spec计算hash值
 	specHash, err := hashstructure.Hash(spec, hashstructure.FormatV2, nil)
 	if err != nil {
 		return "", err
 	}
+	// hash值转成16进制字符串
 	specHashLabel := strconv.FormatUint(specHash, 16)
 	return specHashLabel, nil
 }
