@@ -100,6 +100,7 @@ func (p *Parser) GenerateAppFile(ctx context.Context, app *v1beta1.Application) 
 	if isLatest, appRev, err := p.isLatestPublishVersion(ctx, app); err != nil {
 		return nil, err
 	} else if isLatest {
+		// 确认了是最新的资源之后将ApplicationRevision的Spec信息回写到Application的Spec字段中
 		app.Spec = appRev.Spec.Application.Spec
 		return p.GenerateAppFileFromRevision(appRev)
 	}
@@ -198,37 +199,50 @@ func (p *Parser) newAppfile(appName, ns string, app *v1beta1.Application) *Appfi
 // isLatestPublishVersion checks if the latest application revision has the same publishVersion with the application,
 // return true and the latest ApplicationRevision if they share the same publishVersion
 func (p *Parser) isLatestPublishVersion(ctx context.Context, app *v1beta1.Application) (bool, *v1beta1.ApplicationRevision, error) {
+	// application注解上不存在"app.oam.dev/publishVersion"肯定不是最新的
 	if !metav1.HasAnnotation(app.ObjectMeta, oam.AnnotationPublishVersion) {
 		return false, nil, nil
 	}
+	// application.Status.LatestRevision 为空也不是最新的
 	if app.Status.LatestRevision == nil {
 		return false, nil, nil
 	}
 	appRev := &v1beta1.ApplicationRevision{}
+	// ns/name 查找对应的 ApplicationRevision 资源, 找不到肯定不是最新的
 	if err := p.client.Get(ctx, ktypes.NamespacedName{Name: app.Status.LatestRevision.Name, Namespace: app.GetNamespace()}, appRev); err != nil {
 		if kerrors.IsNotFound(err) {
 			return false, nil, nil
 		}
 		return false, nil, errors.Wrapf(err, "failed to load latest application revision")
 	}
+	// ApplicationRevision 注解上不存在"app.oam.dev/publishVersion"肯定不是最新的
 	if !metav1.HasAnnotation(appRev.ObjectMeta, oam.AnnotationPublishVersion) {
 		return false, nil, nil
 	}
+	// application.Annotation["app.oam.dev/publishVersion"] != appRev.Annotation["app.oam.dev/publishVersion"] 说明并不是最新的
 	if app.GetAnnotations()[oam.AnnotationPublishVersion] != appRev.GetAnnotations()[oam.AnnotationPublishVersion] {
 		return false, nil, nil
 	}
+	// 注解上"app.oam.dev/publishVersion"相等说明当前Application是最新的
 	return true, appRev, nil
 }
 
 // inheritLabelAndAnnotationFromAppRev is a compatible function, that we can't record metadata for application object in AppRev
 func inheritLabelAndAnnotationFromAppRev(appRev *v1beta1.ApplicationRevision) {
+	// 兼容无法在ApplicationRevision上存储application.metadata的情况
+
+	// application.Spec.Application上已经存在Annotation和Label, 说明能写，并不需要兼容，忽略
 	if len(appRev.Spec.Application.Annotations) > 0 || len(appRev.Spec.Application.Labels) > 0 {
 		return
 	}
+	// 继承ApplicationRevision的Namespace
 	appRev.Spec.Application.SetNamespace(appRev.Namespace)
 	if appRev.Spec.Application.GetName() == "" {
+		// ApplicationRevision上的Application没有Name, 用ApplicationRevision的Labels["app.oam.dev/name"]
 		appRev.Spec.Application.SetName(appRev.Labels[oam.LabelAppName])
 	}
+
+	// 继承ApplicationRevision的Label
 	labels := make(map[string]string)
 	for k, v := range appRev.GetLabels() {
 		if k == oam.LabelAppRevisionHash || k == oam.LabelAppName {
@@ -238,6 +252,7 @@ func inheritLabelAndAnnotationFromAppRev(appRev *v1beta1.ApplicationRevision) {
 	}
 	appRev.Spec.Application.SetLabels(labels)
 
+	// 继承ApplicationRevision的Annotation
 	annotations := make(map[string]string)
 	for k, v := range appRev.GetAnnotations() {
 		annotations[k] = v
@@ -247,7 +262,8 @@ func inheritLabelAndAnnotationFromAppRev(appRev *v1beta1.ApplicationRevision) {
 
 // GenerateAppFileFromRevision converts an application revision to an Appfile
 func (p *Parser) GenerateAppFileFromRevision(appRev *v1beta1.ApplicationRevision) (*Appfile, error) {
-
+	// ApplicationRevision 可以看做是 Application 的一个快照, inheritLabelAndAnnotationFromAppRev 用来兼容 Application 上存储
+	// 数据存在部分丢失的情况, 比如Application上的Labels或者Annotation丢失后可以从最新的ApplicationRevision上推断出来
 	inheritLabelAndAnnotationFromAppRev(appRev)
 
 	app := appRev.Spec.Application.DeepCopy()
@@ -264,6 +280,7 @@ func (p *Parser) GenerateAppFileFromRevision(appRev *v1beta1.ApplicationRevision
 	appfile.ExternalWorkflow = appRev.Spec.Workflow
 
 	var wds []*Workload
+	// 遍历application中所有的components解析出每个application的workload
 	for _, comp := range app.Spec.Components {
 		wd, err := p.ParseWorkloadFromRevision(comp, appRev)
 		if err != nil {

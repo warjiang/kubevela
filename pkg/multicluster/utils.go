@@ -60,6 +60,7 @@ var (
 
 // ClusterNameInContext extract cluster name from context
 func ClusterNameInContext(ctx context.Context) string {
+	// ctx 中提取出 ClusterName 信息, 默认为空
 	clusterName := ctx.Value(ClusterContextKey)
 	if clusterName != nil {
 		return clusterName.(string)

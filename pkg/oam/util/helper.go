@@ -573,6 +573,10 @@ func GetDefinitionName(dm discoverymapper.DiscoveryMapper, u *unstructured.Unstr
 
 // GetGVKFromDefinition help get Group Version Kind from DefinitionReference
 func GetGVKFromDefinition(dm discoverymapper.DiscoveryMapper, definitionRef common.DefinitionReference) (metav1.GroupVersionKind, error) {
+	// 根据 definitionRef的 Name 和 Version 调用 dm 拿到对应的 gvk
+	// definitionRef的Name会先转换成 gr 资源, 加上 version 字段就可以组装出 gvr 资源
+	// 有个疑问点： gvr 可能会对应 多个 gvk ？
+
 	// if given definitionRef is empty or it's a dummy definition, return an empty GVK
 	// NOTE currently, only TraitDefinition is allowed to omit definitionRef conditionally.
 	if len(definitionRef.Name) < 1 || definitionRef.Name == Dummy {

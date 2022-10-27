@@ -620,10 +620,15 @@ func parseOptions(args core.Args) options {
 
 func (r *Reconciler) matchControllerRequirement(app *v1beta1.Application) bool {
 	if app.Annotations != nil {
+		// annotaion存在的情况下, 获取annotation["app.oam.dev/controller-version-require"]字段
+		// 判断app预期要求的version和当前controller的verison是否一致
 		if requireVersion, ok := app.Annotations[oam.AnnotationControllerRequirement]; ok {
 			return requireVersion == r.controllerVersion
 		}
 	}
+	// 非正常路径
+	// 如果开启了忽略非正常路径的执行过程则直接返回false,因为不match后续流程都不会走下去
+	// 否则会返回true,然后后续的流程继续兜底
 	if r.ignoreAppNoCtrlReq {
 		return false
 	}

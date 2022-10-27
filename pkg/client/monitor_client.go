@@ -32,6 +32,7 @@ import (
 )
 
 func monitor(ctx context.Context, verb string, obj runtime.Object) func() {
+	// 获取GVK对象
 	o := obj.GetObjectKind().GroupVersionKind()
 	_, isUnstructured := obj.(*unstructured.Unstructured)
 	_, isUnstructuredList := obj.(*unstructured.UnstructuredList)
@@ -39,6 +40,7 @@ func monitor(ctx context.Context, verb string, obj runtime.Object) func() {
 	if isUnstructured || isUnstructuredList {
 		un = "unstructured"
 	}
+	// 从 ctx 上解析出 clusterName, 如果为空则设置为local
 	clusterName := multicluster.ClusterNameInContext(ctx)
 	if clusterName == "" {
 		clusterName = multicluster.ClusterLocalName

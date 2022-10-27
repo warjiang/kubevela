@@ -41,6 +41,9 @@ func Setup(mgr ctrl.Manager, args controller.Args) error {
 			}
 		}
 	case "minimal":
+		// 最小监听的时候就是5个crd
+		// applicationCRD 应该是入口
+		// 一个applicationCRD应该包含后续4个CRD的参数信息比如traintCRD、componentCRD、policyCRD、workflowstepCRD
 		for _, setup := range []func(ctrl.Manager, controller.Args) error{
 			application.Setup, traitdefinition.Setup, componentdefinition.Setup, policydefinition.Setup, workflowstepdefinition.Setup,
 		} {
