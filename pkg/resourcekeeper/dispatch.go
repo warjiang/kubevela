@@ -132,6 +132,7 @@ func (h *resourceKeeper) record(ctx context.Context, manifests []*unstructured.U
 }
 
 func (h *resourceKeeper) dispatch(ctx context.Context, manifests []*unstructured.Unstructured, applyOpts []apply.ApplyOption) error {
+	// 按照MaxDispatchConcurrent并发度运行函数
 	errs := parallel.Run(func(manifest *unstructured.Unstructured) error {
 		applyCtx := multicluster.ContextWithClusterName(ctx, oam.GetCluster(manifest))
 		applyCtx = auth.ContextWithUserInfo(applyCtx, h.app)

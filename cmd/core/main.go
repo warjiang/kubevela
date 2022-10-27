@@ -276,7 +276,9 @@ func main() {
 			os.Exit(1)
 		}
 	}
-
+	// setup函数负责拉起oamv1alpha2下的application/core(component/policy/scope/trait/workflow)/applicationconfiguration相关的controller，
+	// 监听对应的资源并负责执行对应的reconcile函数
+	// Args为命令行启动时候通过flag解析出来的参数
 	if err = oamv1alpha2.Setup(mgr, controllerArgs); err != nil {
 		klog.ErrorS(err, "Unable to setup the oam controller")
 		os.Exit(1)

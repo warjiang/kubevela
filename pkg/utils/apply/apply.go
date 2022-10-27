@@ -137,6 +137,7 @@ func filterRecordForSpecial(desired client.Object) bool {
 	}
 	ann := desired.GetAnnotations()
 	if ann != nil {
+		// "app.oam.dev/last-applied-configuration"
 		lac := ann[oam.AnnotationLastAppliedConfig]
 		if lac == "-" || lac == "skip" {
 			return false
@@ -182,6 +183,7 @@ func (a *APIApplicator) Apply(ctx context.Context, desired client.Object, ao ...
 }
 
 func generateRenderHash(desired client.Object) (string, error) {
+	// 往 client.Object的 label 上写入 "oam.dev/render-hash" = utils.ComputeSpecHash(desired)
 	if desired == nil {
 		return "", nil
 	}
@@ -217,13 +219,22 @@ func createOrGetExisting(ctx context.Context, act *applyAction, c client.Client,
 			}
 		}
 		loggingApply("creating object", desired)
+		// 终于创建对象了!!
 		if act.dryRun {
+			/*
+				// errors.Wrap相当于快捷写法
+				if err := c.Create(ctx, desired, client.DryRunAll); err != nil {
+					return errors.New("cannot create object")
+				}
+				return nil
+			*/
 			return nil, errors.Wrap(c.Create(ctx, desired, client.DryRunAll), "cannot create object")
 		}
 		return nil, errors.Wrap(c.Create(ctx, desired), "cannot create object")
 	}
 
 	// allow to create object with only generateName
+	// client.Object 有meta.name字段但是meta.generateName字段为空一定是新创建对象, 直接执行创建逻辑
 	if desired.GetName() == "" && desired.GetGenerateName() != "" {
 		return create()
 	}
@@ -243,6 +254,7 @@ func createOrGetExisting(ctx context.Context, act *applyAction, c client.Client,
 func executeApplyOptions(act *applyAction, existing, desired client.Object, aos []ApplyOption) error {
 	// if existing is nil, it means the object is going to be created.
 	// ApplyOption function should handle this situation carefully by itself.
+	// 遍历所有的ApplyOption, 任何一个option报错都会跳过后续的option
 	for _, fn := range aos {
 		if err := fn(act, existing, desired); err != nil {
 			return errors.Wrap(err, "cannot apply ApplyOption")
@@ -318,8 +330,8 @@ func GetControlledBy(existing client.Object) string {
 	if labels == nil {
 		return ""
 	}
-	appName := labels[oam.LabelAppName]
-	appNs := labels[oam.LabelAppNamespace]
+	appName := labels[oam.LabelAppName]    // "app.oam.dev/name"
+	appNs := labels[oam.LabelAppNamespace] // "app.oam.dev/namespace"
 	if appName == "" || appNs == "" {
 		return ""
 	}
@@ -328,6 +340,7 @@ func GetControlledBy(existing client.Object) string {
 
 // GetAppKey construct the key for identifying the application
 func GetAppKey(app *v1beta1.Application) string {
+	// appKey={ns}/{application.meta.name}
 	ns := app.Namespace
 	if ns == "" {
 		ns = metav1.NamespaceDefault

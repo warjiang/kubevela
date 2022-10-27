@@ -282,6 +282,8 @@ func FetchWorkloadDefinition(ctx context.Context, r client.Reader, dm discoverym
 // GetDefinitionNamespaceWithCtx will get namespace from context, it will try get `AppDefinitionNamespace` key, if not found,
 // will use default system level namespace defined in `systemvar.SystemDefinitonNamespace`
 func GetDefinitionNamespaceWithCtx(ctx context.Context) string {
+	// 从ctx上根据AppDefinitionNamespace的key获取对应的ns信息
+	// 如果没有获取到，则使用默认的"vela-system"
 	var appNs string
 	if app := ctx.Value(AppDefinitionNamespace); app == nil {
 		appNs = oam.SystemDefinitonNamespace
@@ -307,13 +309,17 @@ func SetNamespaceInCtx(ctx context.Context, namespace string) context.Context {
 
 // GetDefinition get definition from two level namespace
 func GetDefinition(ctx context.Context, cli client.Reader, definition client.Object, definitionName string) error {
+	// ctx中获取namespace, 失败使用默认vela-system
 	appNs := GetDefinitionNamespaceWithCtx(ctx)
+	// 根据ns/name获取definition
 	if err := cli.Get(ctx, types.NamespacedName{Name: definitionName, Namespace: appNs}, definition); err != nil {
 		if apierrors.IsNotFound(err) {
+			// 处理找不到的情况, fallback到ns="vela-system"的namespace下继续找
 			if err = cli.Get(ctx, types.NamespacedName{Name: definitionName, Namespace: oam.SystemDefinitonNamespace}, definition); err != nil {
 				if apierrors.IsNotFound(err) {
 					// compatibility code for old clusters those definition crd is cluster scope
 					var newErr error
+					// 如果还是找不到, 继续fallback到ns=""下面去找
 					if newErr = cli.Get(ctx, types.NamespacedName{Name: definitionName}, definition); checkRequestNamespaceError(newErr) {
 						return err
 					}
@@ -575,7 +581,7 @@ func GetDefinitionName(dm discoverymapper.DiscoveryMapper, u *unstructured.Unstr
 func GetGVKFromDefinition(dm discoverymapper.DiscoveryMapper, definitionRef common.DefinitionReference) (metav1.GroupVersionKind, error) {
 	// 根据 definitionRef的 Name 和 Version 调用 dm 拿到对应的 gvk
 	// definitionRef的Name会先转换成 gr 资源, 加上 version 字段就可以组装出 gvr 资源
-	// 有个疑问点： gvr 可能会对应 多个 gvk ？
+	// 有个疑问点： gvr 可能会对应 多个 gvk ？ => gvk 和 gvr 对应，一个用于type-yaml，一个用于type-api path
 
 	// if given definitionRef is empty or it's a dummy definition, return an empty GVK
 	// NOTE currently, only TraitDefinition is allowed to omit definitionRef conditionally.

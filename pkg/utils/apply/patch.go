@@ -44,14 +44,17 @@ func init() {
 // its current state, modified state, and last-applied-state recorded in the
 // annotation.
 func threeWayMergePatch(currentObj, modifiedObj client.Object, a *applyAction) (client.Patch, error) {
+	// current-config 数据
 	current, err := json.Marshal(currentObj)
 	if err != nil {
 		return nil, err
 	}
+	// last-config 数据
 	original, err := getOriginalConfiguration(currentObj)
 	if err != nil {
 		return nil, err
 	}
+	// modifyied-config 数据
 	modified, err := getModifiedConfiguration(modifiedObj, a.updateAnnotation)
 	if err != nil {
 		return nil, err
@@ -112,23 +115,27 @@ func addLastAppliedConfigAnnotation(obj runtime.Object) error {
 // If `updateAnnotation` is true, it embeds the result as an annotation in the
 // modified configuration.
 func getModifiedConfiguration(obj runtime.Object, updateAnnotation bool) ([]byte, error) {
+	// 获取obj上面的annotation
 	annots, err := metadataAccessor.Annotations(obj)
 	if err != nil {
 		return nil, errors.Wrap(err, "cannot access metadata.annotations")
 	}
+	// 为空情况做一次unify
 	if annots == nil {
 		annots = make(map[string]string)
 	}
-
+	// 获取上次的config数据 "app.oam.dev/last-applied-configuration"
 	original := annots[oam.AnnotationLastAppliedConfig]
 	// remove the annotation to avoid recursion
+	// 从annotino上移除 "app.oam.dev/last-applied-configuration", 并重新设置到obj对象的annotation上
 	delete(annots, oam.AnnotationLastAppliedConfig)
 	_ = metadataAccessor.SetAnnotations(obj, annots)
 	// do not include an empty map
-	if len(annots) == 0 {
+	if len(annots) == 0 { // annotion为空设置为nil
 		_ = metadataAccessor.SetAnnotations(obj, nil)
 	}
 
+	// 对本次即将更新的对象作一次json序列化
 	var modified []byte
 	modified, err = json.Marshal(obj)
 	if err != nil {
@@ -136,6 +143,8 @@ func getModifiedConfiguration(obj runtime.Object, updateAnnotation bool) ([]byte
 	}
 
 	if updateAnnotation {
+		// 开启updateAnnotation=true情况下, 会在函数内部完成对obj的annotation["app.oam.dev/last-applied-configuration"]的更新
+		// 并将携带最新annotion的obj对象重新序列化复制给modified
 		annots[oam.AnnotationLastAppliedConfig] = string(modified)
 		err = metadataAccessor.SetAnnotations(obj, annots)
 		if err != nil {
@@ -157,6 +166,8 @@ func getModifiedConfiguration(obj runtime.Object, updateAnnotation bool) ([]byte
 // getOriginalConfiguration gets original configuration of the object
 // form the annotation, or nil if no annotation found.
 func getOriginalConfiguration(obj runtime.Object) ([]byte, error) {
+	// 从obj的annotaions获取上次的config数据 "app.oam.dev/last-applied-configuration"
+	// 其实就是上次config的数据
 	annots, err := metadataAccessor.Annotations(obj)
 	if err != nil {
 		return nil, errors.Wrap(err, "cannot access metadata.annotations")

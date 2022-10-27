@@ -104,6 +104,7 @@ func (p *Parser) GenerateAppFile(ctx context.Context, app *v1beta1.Application) 
 		app.Spec = appRev.Spec.Application.Spec
 		return p.GenerateAppFileFromRevision(appRev)
 	}
+	// 非最新资源优先使用Application中的数据
 	return p.GenerateAppFileFromApp(ctx, app)
 }
 
@@ -274,6 +275,7 @@ func (p *Parser) GenerateAppFileFromRevision(appRev *v1beta1.ApplicationRevision
 	appfile.AppRevisionName = appRev.Name
 	appfile.AppRevisionHash = appRev.Labels[oam.LabelAppRevisionHash]
 	appfile.ExternalPolicies = make(map[string]*v1alpha1.Policy)
+	// 深拷贝 policies
 	for key, po := range appRev.Spec.Policies {
 		appfile.ExternalPolicies[key] = po.DeepCopy()
 	}
@@ -463,6 +465,7 @@ func (p *Parser) parsePolicies(ctx context.Context, af *Appfile) (err error) {
 func (p *Parser) loadWorkflowToAppfile(ctx context.Context, af *Appfile) error {
 	var err error
 	// parse workflow steps
+	// unify workflow mode 到 Appfile
 	af.WorkflowMode = common.WorkflowModeDAG
 	if wfSpec := af.app.Spec.Workflow; wfSpec != nil && len(wfSpec.Steps) > 0 {
 		af.WorkflowSteps = wfSpec.Steps
@@ -472,6 +475,8 @@ func (p *Parser) loadWorkflowToAppfile(ctx context.Context, af *Appfile) error {
 			af.WorkflowMode = common.WorkflowModeStep
 		}
 	}
+	// WorkflowStepGenerator().Generate() 生成 workflow steps
+	// 构造WorkflowStepGenerator传入的generators参数列表会保存到ChainWorkflowStepGenerator.generators字段
 	af.WorkflowSteps, err = step.NewChainWorkflowStepGenerator(
 		&step.RefWorkflowStepGenerator{Client: af.WorkflowClient(p.client), Context: ctx},
 		&step.DeployWorkflowStepGenerator{},
@@ -605,11 +610,14 @@ func (p *Parser) ParseWorkloadFromRevision(comp common.ApplicationComponent, app
 	}
 	workload.ExternalRevision = comp.ExternalRevision
 
+	// 解析 trait
 	for _, traitValue := range comp.Traits {
+		// traitValue.Properties 转 map
 		properties, err := util.RawExtension2Map(traitValue.Properties)
 		if err != nil {
 			return nil, errors.Errorf("fail to parse properties of %s for %s", traitValue.Type, comp.Name)
 		}
+		// ApplicationRevision 中获取 trait
 		trait, err := p.parseTraitFromRevision(traitValue.Type, properties, appRev)
 		if err != nil {
 			return nil, errors.WithMessagef(err, "component(%s) parse trait(%s)", comp.Name, traitValue.Type)
@@ -617,7 +625,9 @@ func (p *Parser) ParseWorkloadFromRevision(comp common.ApplicationComponent, app
 
 		workload.Traits = append(workload.Traits, trait)
 	}
+	//  解析scope
 	for scopeType, instanceName := range comp.Scopes {
+		// 根据ApplicationRevision解析出scopeDefinition
 		sd, gvk, err := GetScopeDefAndGVKFromRevision(scopeType, appRev)
 		if err != nil {
 			return nil, err
@@ -709,6 +719,10 @@ func GetScopeDefAndGVK(ctx context.Context, cli client.Reader, dm discoverymappe
 	name string) (*v1beta1.ScopeDefinition, metav1.GroupVersionKind, error) {
 	var gvk metav1.GroupVersionKind
 	sd := new(v1beta1.ScopeDefinition)
+	// 依次按照ctx.ns + name
+	// 默认空间vela-system + name
+	// ns="" + name
+	// 的顺序查找definitionName=name的资源
 	err := util.GetDefinition(ctx, cli, sd, name)
 	if err != nil {
 		return nil, gvk, err
@@ -723,10 +737,12 @@ func GetScopeDefAndGVK(ctx context.Context, cli client.Reader, dm discoverymappe
 // GetScopeDefAndGVKFromRevision get grouped API version of the given scope
 func GetScopeDefAndGVKFromRevision(name string, appRev *v1beta1.ApplicationRevision) (*v1beta1.ScopeDefinition, metav1.GroupVersionKind, error) {
 	var gvk metav1.GroupVersionKind
+	// 根据scope name从ApplicationRevision中获取ScopeDefinition
 	sd, ok := appRev.Spec.ScopeDefinitions[name]
 	if !ok {
 		return nil, gvk, fmt.Errorf("scope %s not found in application revision", name)
 	}
+	// 根据RefName/RefVersion获取GVK
 	gvk, ok = appRev.Spec.ScopeGVK[sd.Spec.Reference.Name+"/"+sd.Spec.Reference.Version]
 	if !ok {
 		return nil, gvk, fmt.Errorf("scope definition found but GVK %s not found in application revision", name)

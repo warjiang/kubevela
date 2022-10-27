@@ -180,15 +180,17 @@ const (
 
 // IsStepFinish will decide whether step is finish.
 func IsStepFinish(phase common.WorkflowStepPhase, reason string) bool {
+	// 根据 WorkflowStepPhase 判断workflow step是否完成
+	// 开启 "EnableSuspendOnFailure" 时, 则只有 "succeeded" 算作成功状态
 	if feature.DefaultMutableFeatureGate.Enabled(features.EnableSuspendOnFailure) {
 		return phase == common.WorkflowStepPhaseSucceeded
 	}
 	switch phase {
-	case common.WorkflowStepPhaseFailed:
+	case common.WorkflowStepPhaseFailed: // 失败情况下, 有返回的reason且reason不等于Execute可以认为是完成
 		return reason != "" && reason != StatusReasonExecute
-	case common.WorkflowStepPhaseSkipped:
+	case common.WorkflowStepPhaseSkipped: // 跳过算完成
 		return true
-	case common.WorkflowStepPhaseSucceeded:
+	case common.WorkflowStepPhaseSucceeded: // 执行成功算完成
 		return true
 	default:
 		return false

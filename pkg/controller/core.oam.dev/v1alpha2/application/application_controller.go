@@ -162,6 +162,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 		r.Recorder.Event(app, event.Warning(velatypes.ReasonFailedParse, err))
 		return r.endWithNegativeCondition(logCtx, app, condition.ErrorCondition("Parsed", err), common.ApplicationRendering)
 	}
+	// Parsed -> Revision -> Policy -> Render
 	app.Status.SetConditions(condition.ReadyCondition("Parsed"))
 	r.Recorder.Event(app, event.Normal(velatypes.ReasonParsed, velatypes.MessageParsed))
 
@@ -609,6 +610,7 @@ func timeReconcile(app *v1beta1.Application) func() {
 }
 
 func parseOptions(args core.Args) options {
+	// unify 从flags解析出来的启动参数
 	return options{
 		disableStatusUpdate:  args.EnableCompatibility,
 		appRevisionLimit:     args.AppRevisionLimit,

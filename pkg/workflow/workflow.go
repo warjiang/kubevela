@@ -132,7 +132,7 @@ func (w *workflow) ExecuteSteps(ctx monitorContext.Context, appRev *oamcore.Appl
 		return common.WorkflowStateFinished, nil
 	}
 
-	if needRestart(w.app, appRev.Name) {
+	if needRestart(w.app, appRev.Name) { // 冷启动时需要重启下
 		return w.restartWorkflow(ctx, revAndSpecHash)
 	}
 
@@ -395,13 +395,21 @@ func (w *workflow) GetBackoffWaitTime() time.Duration {
 }
 
 func (w *workflow) allDone(taskRunners []wfTypes.TaskRunner) (bool, bool) {
+	// 遍历tasks和steps数组判断是否全部task runner都已经完成
 	success := true
 	status := w.app.Status.Workflow
+	// taskRunners t1    t2    t3    t4
+	// stepStatus  s1/t1 s2/t2 s3/t3 s4/t4
 	for _, t := range taskRunners {
 		done := false
 		for _, ss := range status.Steps {
 			if ss.Name == t.Name() {
 				done = wfTypes.IsStepFinish(ss.Phase, ss.Reason)
+				/*
+					感觉写多余了，单独看
+					done && (ss.Phase == common.WorkflowStepPhaseSucceeded || ss.Phase == common.WorkflowStepPhaseSkipped)
+					如果ss.Phase == common.WorkflowStepPhaseSucceeded 或者 common.WorkflowStepPhaseSkipped 那么done一定为true
+				*/
 				success = success && done && (ss.Phase == common.WorkflowStepPhaseSucceeded || ss.Phase == common.WorkflowStepPhaseSkipped)
 				break
 			}
