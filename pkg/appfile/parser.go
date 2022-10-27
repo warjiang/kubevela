@@ -104,7 +104,7 @@ func (p *Parser) GenerateAppFile(ctx context.Context, app *v1beta1.Application) 
 		app.Spec = appRev.Spec.Application.Spec
 		return p.GenerateAppFileFromRevision(appRev)
 	}
-	// 非最新资源优先使用Application中的数据
+	// 非最新资源优先使用Application中的数据(第一次必然会命中这个逻辑)
 	return p.GenerateAppFileFromApp(ctx, app)
 }
 
@@ -120,6 +120,7 @@ func (p *Parser) GenerateAppFileFromApp(ctx context.Context, app *v1beta1.Applic
 
 	var wds []*Workload
 	for _, comp := range app.Spec.Components {
+		// 遍历application下的所有Components, 解析成 Workload
 		wd, err := p.parseWorkload(ctx, comp)
 		if err != nil {
 			return nil, err
@@ -127,6 +128,7 @@ func (p *Parser) GenerateAppFileFromApp(ctx context.Context, app *v1beta1.Applic
 
 		wds = append(wds, wd)
 	}
+	// Appfile保存workloads和components
 	appfile.Workloads = wds
 	appfile.Components = app.Spec.Components
 
@@ -172,6 +174,7 @@ func (p *Parser) GenerateAppFileFromApp(ctx context.Context, app *v1beta1.Applic
 }
 
 func (p *Parser) newAppfile(appName, ns string, app *v1beta1.Application) *Appfile {
+	// 构造Appfile对象
 	file := &Appfile{
 		Name:      appName,
 		Namespace: ns,
@@ -188,9 +191,11 @@ func (p *Parser) newAppfile(appName, ns string, app *v1beta1.Application) *Appfi
 		parser: p,
 		app:    app,
 	}
+	// Appfile.AppAnnotations 会继承 application.Annotations
 	for k, v := range app.Annotations {
 		file.AppAnnotations[k] = v
 	}
+	// Appfile.AppLabels 会继承 application.Labels
 	for k, v := range app.Labels {
 		file.AppLabels[k] = v
 	}
@@ -528,6 +533,10 @@ func (p *Parser) parseWorkflowStep(ctx context.Context, af *Appfile, workflowSte
 	return nil
 }
 func (p *Parser) makeWorkload(ctx context.Context, name, typ string, capType types.CapType, props *runtime.RawExtension) (*Workload, error) {
+	// name    workload 名称
+	// typ     workload 子类型, 比如 webservice
+	// capType workload 类型，比如 Component
+	// props   用户应用某种子类型传入的参数，map结构
 	templ, err := p.tmplLoader.LoadTemplate(ctx, p.dm, p.client, typ, capType)
 	if err != nil {
 		return nil, errors.WithMessagef(err, "fetch component/policy type of %s", name)
@@ -568,6 +577,15 @@ func (p *Parser) convertTemplate2Workload(name, typ string, props *runtime.RawEx
 // parseWorkload resolve an ApplicationComponent and generate a Workload
 // containing ALL information required by an Appfile.
 func (p *Parser) parseWorkload(ctx context.Context, comp common.ApplicationComponent) (*Workload, error) {
+	/*
+		Name => vela-nginx
+		Type => webservice
+		Properties => {
+			Raw: []byte(`{"image":"nginx:1.23.2-alpine","ports":[{"expose":true,"port":80}]}`),
+			Object: nil,
+		}
+	*/
+	// 根据输入的component构造workload
 	workload, err := p.makeWorkload(ctx, comp.Name, comp.Type, types.TypeComponentDefinition, comp.Properties)
 	if err != nil {
 		return nil, err

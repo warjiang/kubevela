@@ -104,7 +104,7 @@ type options struct {
 // Reconcile process app event
 // nolint:gocyclo
 func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-
+	// req => ctrl.Request{Namespace: "default", Name: "vela-nginx"}
 	ctx, cancel := context.WithTimeout(ctx, common2.ReconcileTimeout)
 	defer cancel()
 
@@ -132,6 +132,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 	defer timeReporter()
 
 	logCtx.AddTag("resource_version", app.ResourceVersion).AddTag("generation", app.Generation)
+	// 只要进到reconcile函数之后会提前把application的namespace字段设置到context[AppDefinitionNamespace]中
 	ctx = oamutil.SetNamespaceInCtx(ctx, app.Namespace)
 	logCtx.SetContext(ctx)
 	// 取application上的annotation, 为空或者"oam.dev/kubevela-version"对应的value为空的情况下

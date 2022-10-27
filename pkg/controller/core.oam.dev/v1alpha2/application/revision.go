@@ -201,7 +201,7 @@ func (h *AppHandler) PrepareCurrentAppRevision(ctx context.Context, af *appfile.
 		h.currentRevHash = af.AppRevisionHash
 		return nil
 	}
-
+	// 首次创建的时候必然不纯在ApplicationRevision
 	appRev, appRevisionHash, err := h.gatherRevisionSpec(af)
 	if err != nil {
 		return err
@@ -233,6 +233,19 @@ func (h *AppHandler) PrepareCurrentAppRevision(ctx context.Context, af *appfile.
 func (h *AppHandler) gatherRevisionSpec(af *appfile.Appfile) (*v1beta1.ApplicationRevision, string, error) {
 	copiedApp := h.app.DeepCopy()
 	// We better to remove all object status in the appRevision
+	/*
+		ApplicationRevision内部持有{
+			Application:             *copiedApp,
+			ComponentDefinitions:    make(map[string]v1beta1.ComponentDefinition),
+			WorkloadDefinitions:     make(map[string]v1beta1.WorkloadDefinition),
+			TraitDefinitions:        make(map[string]v1beta1.TraitDefinition),
+			ScopeDefinitions:        make(map[string]v1beta1.ScopeDefinition),
+			PolicyDefinitions:       make(map[string]v1beta1.PolicyDefinition),
+			WorkflowStepDefinitions: make(map[string]v1beta1.WorkflowStepDefinition),
+			ScopeGVK:                make(map[string]metav1.GroupVersionKind),
+			Policies:                make(map[string]v1alpha1.Policy),
+		}
+	*/
 	copiedApp.Status = common.AppStatus{}
 	appRev := &v1beta1.ApplicationRevision{
 		Spec: v1beta1.ApplicationRevisionSpec{

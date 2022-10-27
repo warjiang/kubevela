@@ -309,12 +309,14 @@ func SetNamespaceInCtx(ctx context.Context, namespace string) context.Context {
 
 // GetDefinition get definition from two level namespace
 func GetDefinition(ctx context.Context, cli client.Reader, definition client.Object, definitionName string) error {
-	// ctx中获取namespace, 失败使用默认vela-system
+	// pkg/controller/core.oam.dev/v1alpha2/application/application_controller.go:135 提前把 reconcile 请求中
+	// 解析出来的namespace设置到ctx上了
+	// 有限使用ctx中获取namespace, 失败使用默认vela-system
 	appNs := GetDefinitionNamespaceWithCtx(ctx)
 	// 根据ns/name获取definition
 	if err := cli.Get(ctx, types.NamespacedName{Name: definitionName, Namespace: appNs}, definition); err != nil {
 		if apierrors.IsNotFound(err) {
-			// 处理找不到的情况, fallback到ns="vela-system"的namespace下继续找
+			// 处理找不到的情况, fallback到ns="vela-system"的namespace下继续找 kubectl get comp/{definitionName} -n vela-system -oyaml
 			if err = cli.Get(ctx, types.NamespacedName{Name: definitionName, Namespace: oam.SystemDefinitonNamespace}, definition); err != nil {
 				if apierrors.IsNotFound(err) {
 					// compatibility code for old clusters those definition crd is cluster scope
