@@ -380,6 +380,8 @@ func fetchDefinitionRev(ctx context.Context, cli client.Reader, definitionName s
 // ConvertDefinitionRevName can help convert definition type defined in Application to DefinitionRevision Name
 // e.g., worker@v1.3.1 will be convert to worker-v1.3.1
 func ConvertDefinitionRevName(definitionName string) (string, error) {
+	// webservice -> webservice
+	// webservice@v1.0.0 -> webservice-1.0.0
 	splits := strings.Split(definitionName, "@v")
 	if len(splits) == 1 || len(splits[0]) == 0 {
 		errs := validation.IsQualifiedName(definitionName)

@@ -537,10 +537,13 @@ func (p *Parser) makeWorkload(ctx context.Context, name, typ string, capType typ
 	// typ     workload 子类型, 比如 webservice
 	// capType workload 类型，比如 Component
 	// props   用户应用某种子类型传入的参数，map结构
+
+	// 1. 根据传入的 workload 类型找到对应的 definition, 组装 template
 	templ, err := p.tmplLoader.LoadTemplate(ctx, p.dm, p.client, typ, capType)
 	if err != nil {
 		return nil, errors.WithMessagef(err, "fetch component/policy type of %s", name)
 	}
+
 	return p.convertTemplate2Workload(name, typ, props, templ)
 }
 
@@ -554,10 +557,28 @@ func (p *Parser) makeWorkloadFromRevision(name, typ string, capType types.CapTyp
 }
 
 func (p *Parser) convertTemplate2Workload(name, typ string, props *runtime.RawExtension, templ *Template) (*Workload, error) {
+	/*
+		props 转 map
+		props => {
+			Raw: []byte(`{"image":"nginx:1.23.2-alpine","ports":[{"expose":true,"port":80}]}`),
+			Object: nil,
+		}
+		settings => {
+			"image":"nginx:1.23.2-alpine",
+			"ports":[
+				{
+					"expose":true,
+					"port":80
+				}
+			]
+		}
+	*/
 	settings, err := util.RawExtension2Map(props)
 	if err != nil {
 		return nil, errors.WithMessagef(err, "fail to parse settings for %s", name)
 	}
+	// typ 比如 webservice
+	// wlType 得到的还是 webservice
 	wlType, err := util.ConvertDefinitionRevName(typ)
 	if err != nil {
 		wlType = typ
