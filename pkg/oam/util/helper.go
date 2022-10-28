@@ -311,7 +311,7 @@ func SetNamespaceInCtx(ctx context.Context, namespace string) context.Context {
 func GetDefinition(ctx context.Context, cli client.Reader, definition client.Object, definitionName string) error {
 	// pkg/controller/core.oam.dev/v1alpha2/application/application_controller.go:135 提前把 reconcile 请求中
 	// 解析出来的namespace设置到ctx上了
-	// 有限使用ctx中获取namespace, 失败使用默认vela-system
+	// 优先使用ctx中获取namespace, 失败使用默认vela-system的namespace
 	appNs := GetDefinitionNamespaceWithCtx(ctx)
 	// 根据ns/name获取definition
 	if err := cli.Get(ctx, types.NamespacedName{Name: definitionName, Namespace: appNs}, definition); err != nil {
@@ -339,13 +339,20 @@ func GetDefinition(ctx context.Context, cli client.Reader, definition client.Obj
 // GetCapabilityDefinition can get different versions of ComponentDefinition/TraitDefinition
 func GetCapabilityDefinition(ctx context.Context, cli client.Reader, definition client.Object,
 	definitionName string) error {
+	// vela系统中的definition可能存在多版本,一般会按照 webservice-v1.0.0、webservice(最新版)形式存储
+	// 这里返回值可能有如下情况
+	// 1. isLatestRevision=true,  defRev=nil, err=nil
+	// 2. isLatestRevision=false, defRev=DefinitionRevision{}, err=nil
+	// 3. isLatestRevision=false, defRev=nil, err=k8s qualified name 校验失败
 	isLatestRevision, defRev, err := fetchDefinitionRev(ctx, cli, definitionName)
 	if err != nil {
 		return err
 	}
 	if isLatestRevision {
+		// 如果需要用最新版本的definition, 直接按照 name=definitionName 获取
 		return GetDefinition(ctx, cli, definition, definitionName)
 	}
+	// 从 definition 中取出真正的 Definition
 	switch def := definition.(type) {
 	case *v1beta1.ComponentDefinition:
 		*def = defRev.Spec.ComponentDefinition
@@ -362,15 +369,18 @@ func GetCapabilityDefinition(ctx context.Context, cli client.Reader, definition 
 
 func fetchDefinitionRev(ctx context.Context, cli client.Reader, definitionName string) (bool, *v1beta1.DefinitionRevision, error) {
 	// if the component's type doesn't contain '@' means user want to use the latest Definition.
+	// 如果definitionName中不包含@, 默认为最新的definition, 把问题丢出去让调用者获取最新版的定义
 	if !strings.Contains(definitionName, "@") {
 		return true, nil, nil
 	}
 
+	// 执行到这里definitionName中肯定包含@,比如 webservice@1.0.0 转换成 webserver-v1.0.0
 	defRevName, err := ConvertDefinitionRevName(definitionName)
 	if err != nil {
 		return false, nil, err
 	}
 	defRev := new(v1beta1.DefinitionRevision)
+	// 真正获取definition的动作
 	if err := GetDefinition(ctx, cli, defRev, defRevName); err != nil {
 		return false, nil, err
 	}
@@ -384,6 +394,7 @@ func ConvertDefinitionRevName(definitionName string) (string, error) {
 	// webservice@v1.0.0 -> webservice-1.0.0
 	splits := strings.Split(definitionName, "@v")
 	if len(splits) == 1 || len(splits[0]) == 0 {
+		// split为0或者1可以直接返回, 返回前让definitionName通过k8s的qualified name校验
 		errs := validation.IsQualifiedName(definitionName)
 		if len(errs) != 0 {
 			return definitionName, errors.Errorf("invalid definitionRevision name %s:%s", definitionName, strings.Join(errs, ","))
@@ -391,9 +402,12 @@ func ConvertDefinitionRevName(definitionName string) (string, error) {
 		return definitionName, nil
 	}
 
+	// 按照@v将definitionName分割成两部分, 前半部分是defName, 后半部分是revisionName
 	defName := splits[0]
 	revisionName := strings.TrimPrefix(definitionName, fmt.Sprintf("%s@v", defName))
+	// 组装成 webservice-v1.0.0 的格式
 	defRevName := fmt.Sprintf("%s-v%s", defName, revisionName)
+	// 组装后执行qualified name校验
 	errs := validation.IsQualifiedName(defRevName)
 	if len(errs) != 0 {
 		return defRevName, errors.Errorf("invalid definitionRevision name %s:%s", defName, strings.Join(errs, ","))
@@ -593,8 +607,11 @@ func GetGVKFromDefinition(dm discoverymapper.DiscoveryMapper, definitionRef comm
 		return metav1.GroupVersionKind{}, nil
 	}
 	var gvk metav1.GroupVersionKind
+	// definitionRef.Name 可能的输入是: name: healthscopes.core.oam.dev
+	// 返回的groupResource 是: GroupResource{Group: core.oam.dev, Resource: healthscopes}
 	groupResource := schema.ParseGroupResource(definitionRef.Name)
 	gvr := schema.GroupVersionResource{Group: groupResource.Group, Resource: groupResource.Resource, Version: definitionRef.Version}
+	// 根据gvr反查gvks
 	kinds, err := dm.KindsFor(gvr)
 	if err != nil {
 		return gvk, err

@@ -97,6 +97,7 @@ func (p *Parser) GenerateAppFile(ctx context.Context, app *v1beta1.Application) 
 		}))
 		defer subCtx.Commit("finish generate appFile")
 	}
+	// 尝试从Application对象上解析出最新的ApplicationRevision对象
 	if isLatest, appRev, err := p.isLatestPublishVersion(ctx, app); err != nil {
 		return nil, err
 	} else if isLatest {
@@ -113,14 +114,15 @@ func (p *Parser) GenerateAppFileFromApp(ctx context.Context, app *v1beta1.Applic
 	ns := app.Namespace
 	appName := app.Name
 
+	// 基于 application 对象构造 appFile 壳子
 	appfile := p.newAppfile(appName, ns, app)
 	if app.Status.LatestRevision != nil {
 		appfile.AppRevisionName = app.Status.LatestRevision.Name
 	}
 
+	// 遍历application下的所有Components, 解析成 Workload
 	var wds []*Workload
 	for _, comp := range app.Spec.Components {
-		// 遍历application下的所有Components, 解析成 Workload
 		wd, err := p.parseWorkload(ctx, comp)
 		if err != nil {
 			return nil, err
@@ -205,7 +207,14 @@ func (p *Parser) newAppfile(appName, ns string, app *v1beta1.Application) *Appfi
 // isLatestPublishVersion checks if the latest application revision has the same publishVersion with the application,
 // return true and the latest ApplicationRevision if they share the same publishVersion
 func (p *Parser) isLatestPublishVersion(ctx context.Context, app *v1beta1.Application) (bool, *v1beta1.ApplicationRevision, error) {
-	// application注解上不存在"app.oam.dev/publishVersion"肯定不是最新的
+	// isLatestPublishVersion 尝试从Application上解析出最新的ApplicationRevision对象
+	// 只要一个Application 对象 Reconcile 成功情况下, Application.Annotations["app.oam.dev/publishVersion"] 应该
+	// 与Application.Status.LatestRevision.Name反查出来的ApplicationRevision.Annotations["app.oam.dev/publishVersion"]一致
+
+	// 如果解析成功返回true, lastest ApplicationRevision对象, nil
+	// 如果解析失败(比如Application对象第一次Reconcile的情况下)返回 false,nil, nil 让外部自行处理
+
+	// 如果application的注解上不存在"app.oam.dev/publishVersion", 则 ApplicationRevision 一定不是最新的
 	if !metav1.HasAnnotation(app.ObjectMeta, oam.AnnotationPublishVersion) {
 		return false, nil, nil
 	}
@@ -543,7 +552,7 @@ func (p *Parser) makeWorkload(ctx context.Context, name, typ string, capType typ
 	if err != nil {
 		return nil, errors.WithMessagef(err, "fetch component/policy type of %s", name)
 	}
-
+	// 2. template 转 workload
 	return p.convertTemplate2Workload(name, typ, props, templ)
 }
 
@@ -599,12 +608,15 @@ func (p *Parser) convertTemplate2Workload(name, typ string, props *runtime.RawEx
 // containing ALL information required by an Appfile.
 func (p *Parser) parseWorkload(ctx context.Context, comp common.ApplicationComponent) (*Workload, error) {
 	/*
-		Name => vela-nginx
-		Type => webservice
-		Properties => {
-			Raw: []byte(`{"image":"nginx:1.23.2-alpine","ports":[{"expose":true,"port":80}]}`),
-			Object: nil,
-		}
+		一个Component案例比如
+			{
+				Name => vela-nginx
+				Type => webservice
+				Properties => {
+					Raw: []byte(`{"image":"nginx:1.23.2-alpine","ports":[{"expose":true,"port":80}]}`),
+					Object: nil,
+				}
+			}
 	*/
 	// 根据输入的component构造workload
 	workload, err := p.makeWorkload(ctx, comp.Name, comp.Type, types.TypeComponentDefinition, comp.Properties)
@@ -614,26 +626,36 @@ func (p *Parser) parseWorkload(ctx context.Context, comp common.ApplicationCompo
 	workload.ExternalRevision = comp.ExternalRevision
 
 	for _, traitValue := range comp.Traits {
+		// 每个trait的Properties转成map
 		properties, err := util.RawExtension2Map(traitValue.Properties)
 		if err != nil {
 			return nil, errors.Errorf("fail to parse properties of %s for %s", traitValue.Type, comp.Name)
 		}
+		// 生成trait对象
 		trait, err := p.parseTrait(ctx, traitValue.Type, properties)
 		if err != nil {
 			return nil, errors.WithMessagef(err, "component(%s) parse trait(%s)", comp.Name, traitValue.Type)
 		}
-
+		// 会写到 workload 上
 		workload.Traits = append(workload.Traits, trait)
 	}
+	/*
+		一个Component的Scopes案例如下:
+		scopes:
+			healthscopes.core.oam.dev: sample-health-scope
+	*/
 	for scopeType, instanceName := range comp.Scopes {
+		// 根据 scopeType 信息查询出 scopeDefinition 和 gvk
 		sd, gvk, err := GetScopeDefAndGVK(ctx, p.client, p.dm, scopeType)
 		if err != nil {
 			return nil, err
 		}
+		// Scopes 和 ScopeDefinition 双写
+		// 两个数组通过下标一一对应
 		workload.Scopes = append(workload.Scopes, Scope{
 			Name:            instanceName,
 			GVK:             gvk,
-			ResourceVersion: sd.Spec.Reference.Name + "/" + sd.Spec.Reference.Version,
+			ResourceVersion: sd.Spec.Reference.Name + "/" + sd.Spec.Reference.Version, // healthscopes.core.oam.dev/''
 		})
 		workload.ScopeDefinition = append(workload.ScopeDefinition, sd)
 	}
@@ -682,6 +704,7 @@ func (p *Parser) ParseWorkloadFromRevision(comp common.ApplicationComponent, app
 }
 
 func (p *Parser) parseTrait(ctx context.Context, name string, properties map[string]interface{}) (*Trait, error) {
+	// 1. 根据 name + trait 解析出 traitDefinition, 构造 template 对象
 	templ, err := p.tmplLoader.LoadTemplate(ctx, p.dm, p.client, name, types.TypeTrait)
 	if kerrors.IsNotFound(err) {
 		return nil, errors.Errorf("trait definition of %s not found", name)
@@ -689,6 +712,7 @@ func (p *Parser) parseTrait(ctx context.Context, name string, properties map[str
 	if err != nil {
 		return nil, err
 	}
+	// 2. template 转 trait 对象
 	return p.convertTemplate2Trait(name, properties, templ)
 }
 
@@ -758,6 +782,8 @@ func GetScopeDefAndGVK(ctx context.Context, cli client.Reader, dm discoverymappe
 	name string) (*v1beta1.ScopeDefinition, metav1.GroupVersionKind, error) {
 	var gvk metav1.GroupVersionKind
 	sd := new(v1beta1.ScopeDefinition)
+	// 根据ns和scope definition name查找scopedefinition
+	// ns查找规则, 优先取ctx上的namespace, 再找默认的namespace(vela-system)
 	// 依次按照ctx.ns + name
 	// 默认空间vela-system + name
 	// ns="" + name
@@ -766,6 +792,26 @@ func GetScopeDefAndGVK(ctx context.Context, cli client.Reader, dm discoverymappe
 	if err != nil {
 		return nil, gvk, err
 	}
+	/*
+		根据ScopeDefinition的spec.definitionRef反查gvk
+		比如healthscopes.core.oam.dev(kubectl get scope/healthscopes.core.oam.dev -n vela-system -oyaml)
+		apiVersion: core.oam.dev/v1beta1
+		kind: ScopeDefinition
+		metadata:
+		  annotations:
+			meta.helm.sh/release-name: kubevela
+			meta.helm.sh/release-namespace: vela-system
+		  labels:
+			app.kubernetes.io/managed-by: Helm
+		  name: healthscopes.core.oam.dev
+		  namespace: vela-system
+		spec:
+		  allowComponentOverlap: true
+		  definitionRef:
+			name: healthscopes.core.oam.dev
+		  workloadRefsPath: spec.workloadRefs
+	*/
+	// 内部会反查healthscopes.core.oam.dev的gvk
 	gvk, err = util.GetGVKFromDefinition(dm, sd.Spec.Reference)
 	if err != nil {
 		return nil, gvk, err

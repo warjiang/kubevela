@@ -69,11 +69,16 @@ type Template struct {
 // LoadTemplate gets the capability definition from cluster and resolve it.
 // It returns a helper struct, Template, which will be used for further
 // processing.
+// 根据capType/capName获取对应的模板定义
+// 假如 capType="componentDefinition" capName="webservice" 其效果等效于 kubectl get comp/webservice -n vela-system -oyaml
+// 启动 comp 可以从componentDefinition CRD中拿到
 func LoadTemplate(ctx context.Context, dm discoverymapper.DiscoveryMapper, cli client.Reader, capName string, capType types.CapType) (*Template, error) {
 	// Application Controller only load template from ComponentDefinition and TraitDefinition
 	switch capType {
 	case types.TypeComponentDefinition, types.TypeWorkload:
 		cd := new(v1beta1.ComponentDefinition)
+		// GetCapabilityDefinition 内部根据 capName + ns 信息返回 definition 定义
+		// Application Controller 目前的执行逻辑只会加载 ComponentDefinition 和 TraitDefinition 两种
 		err := oamutil.GetCapabilityDefinition(ctx, cli, cd, capName)
 		if err != nil {
 			if kerrors.IsNotFound(err) {
@@ -102,6 +107,7 @@ func LoadTemplate(ctx context.Context, dm discoverymapper.DiscoveryMapper, cli c
 			}
 			return nil, errors.WithMessagef(err, "load template from component definition [%s] ", capName)
 		}
+		// definition 转 template
 		tmpl, err := newTemplateOfCompDefinition(cd)
 		if err != nil {
 			return nil, err
@@ -309,6 +315,7 @@ func newTemplateOfCompDefinition(compDef *v1beta1.ComponentDefinition) (*Templat
 		Reference:           compDef.Spec.Workload,
 		ComponentDefinition: compDef,
 	}
+	// 将definition上的参数合并到tmpl对象上
 	if err := loadSchematicToTemplate(tmpl, compDef.Spec.Status, compDef.Spec.Schematic, compDef.Spec.Extension); err != nil {
 		return nil, errors.WithMessage(err, "cannot load template")
 	}
@@ -397,7 +404,9 @@ func loadSchematicToTemplate(tmpl *Template, status *common.Status, schematic *c
 			return nil
 		}
 	}
-
+	// 如果TemplateStr为空且ext不为空的情况下
+	// 设置类型默认为CUE
+	// 将ext.Raw里面的数据反序列化成map结构extension, 将extension["template"]的值赋给TemplateStr表示模板内容
 	if tmpl.TemplateStr == "" && ext != nil {
 		tmpl.CapabilityCategory = types.CUECategory
 		extension := map[string]interface{}{}

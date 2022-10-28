@@ -67,6 +67,7 @@ type RefWorkflowStepGenerator struct {
 
 // Generate generate workflow steps
 func (g *RefWorkflowStepGenerator) Generate(app *v1beta1.Application, existingSteps []v1beta1.WorkflowStep) (steps []v1beta1.WorkflowStep, err error) {
+	// TODO refwork flow怎么用还不清楚呢-_-
 	if app.Spec.Workflow == nil || app.Spec.Workflow.Ref == "" {
 		return existingSteps, nil
 	}
@@ -108,13 +109,18 @@ func (g *Deploy2EnvWorkflowStepGenerator) Generate(app *v1beta1.Application, exi
 	if len(existingSteps) > 0 {
 		return existingSteps, nil
 	}
+	// 遍历所有的policy
 	for _, policy := range app.Spec.Policies {
+		// 找 type="env-binding" 的policy 且 Properties 不为空的case
 		if policy.Type == v1alpha1.EnvBindingPolicyType && policy.Properties != nil {
 			spec := &v1alpha1.EnvBindingSpec{}
+			// Properties 反序列化成 EnvBindingSpec 对象
 			if err = json.Unmarshal(policy.Properties.Raw, spec); err != nil {
 				return
 			}
+			// 遍历spec.Envs
 			for _, env := range spec.Envs {
+				// env -> step
 				steps = append(steps, v1beta1.WorkflowStep{
 					Name: "deploy-" + policy.Name + "-" + env.Name,
 					Type: "deploy2env",
@@ -134,11 +140,16 @@ type DeployWorkflowStepGenerator struct{}
 
 // Generate generate workflow steps
 func (g *DeployWorkflowStepGenerator) Generate(app *v1beta1.Application, existingSteps []v1beta1.WorkflowStep) (steps []v1beta1.WorkflowStep, err error) {
+	// TODO 1. policy 命中的条件
 	if len(existingSteps) > 0 {
 		return existingSteps, nil
 	}
 	var topologies []string
 	var overrides []string
+	// TODO 2.topology、override 的 policy 似乎是对全部 component 生效
+	// 这里的实现似乎是会遍历所有的policy
+	// 所有的topology收集到topologies数组中
+	// 所有的override收集到overrides数组中
 	for _, policy := range app.Spec.Policies {
 		switch policy.Type {
 		case v1alpha1.TopologyPolicyType:
@@ -148,6 +159,7 @@ func (g *DeployWorkflowStepGenerator) Generate(app *v1beta1.Application, existin
 		}
 	}
 	for _, topology := range topologies {
+		// topology -> workflow step
 		steps = append(steps, v1beta1.WorkflowStep{
 			Name: "deploy-" + topology,
 			Type: "deploy",
@@ -158,12 +170,16 @@ func (g *DeployWorkflowStepGenerator) Generate(app *v1beta1.Application, existin
 	}
 	if len(topologies) == 0 {
 		containsRefObjects := false
+		// 遍历判断是否存在 ref-objects
+		// 关键现在都没有type=ref-objects了
+		// https://kubevela.net/zh/docs/end-user/components/references
 		for _, comp := range app.Spec.Components {
 			if comp.Type == v1alpha1.RefObjectsComponentType {
 				containsRefObjects = true
 				break
 			}
 		}
+		// TODO containsRefObjects必为false
 		if containsRefObjects || len(overrides) > 0 {
 			steps = append(steps, v1beta1.WorkflowStep{
 				Name:       "deploy",

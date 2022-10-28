@@ -68,6 +68,7 @@ type ApplyOption func(act *applyAction, existing, desired client.Object) error
 
 // NewAPIApplicator creates an Applicator that applies state to an
 // object or creates the object if not exist.
+// APIApplicator 内部负责更新 k8s 对象的状态, 以及创建 k8s 对象
 func NewAPIApplicator(c client.Client) *APIApplicator {
 	return &APIApplicator{
 		creator: creatorFn(createOrGetExisting),

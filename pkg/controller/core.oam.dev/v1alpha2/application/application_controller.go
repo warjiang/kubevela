@@ -141,12 +141,14 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 		metav1.SetMetaDataAnnotation(&app.ObjectMeta, oam.AnnotationKubeVelaVersion, version.VelaVersion)
 	}
 	logCtx.AddTag("publish_version", app.GetAnnotations()[oam.AnnotationPublishVersion])
-
+	// 构造 ApplicationParser
 	appParser := appfile.NewApplicationParser(r.Client, r.dm, r.pd)
+	// 构造 AppHandler, 内部比较重要的动作是构造 resourceKeeper
 	handler, err := NewAppHandler(logCtx, r, app, appParser)
 	if err != nil {
 		return r.endWithNegativeCondition(logCtx, app, condition.ReconcileError(err), common.ApplicationStarting)
 	}
+	// TODO 删除逻辑还需要再跟一下
 	endReconcile, result, err := r.handleFinalizers(logCtx, app, handler)
 	if err != nil {
 		if app.GetDeletionTimestamp() == nil {
@@ -157,7 +159,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 	if endReconcile {
 		return result, nil
 	}
-
+	// AppParser生成appfile对象
 	appFile, err := appParser.GenerateAppFile(logCtx, app)
 	if err != nil {
 		r.Recorder.Event(app, event.Warning(velatypes.ReasonFailedParse, err))
