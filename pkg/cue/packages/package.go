@@ -336,6 +336,24 @@ type domainGroupVersionKind struct {
 }
 
 func (dgvk domainGroupVersionKind) reverseString() string {
+	/*
+		输入: {
+			Version:    "v1"
+			Kind:       "Bucket",
+			APIVersion: "v1",
+			Domain: 	"test.io",
+			Group: 		"apps"
+		}
+		s = []string{"Bucket", "v1"}
+		// domain split之后
+		s = []string{"Bucket", "v1", "test", "io"}
+		// swap
+		s = []string{"test", "io", "v1", "Bucket"}
+		// join
+		test_io_v1_Bucket
+		// replace
+		test_io_v1_Bucket
+	*/
 	var s = []string{dgvk.Kind, dgvk.Version}
 	s = append(s, strings.Split(dgvk.Group, ".")...)
 	domain := dgvk.Domain
@@ -397,6 +415,14 @@ func (pkg *pkgInstance) processOpenAPIFile(f *ast.File) {
 }
 
 func getDGVK(v cue.Value) (ret domainGroupVersionKind, err error) {
+	/*
+		cue中的gvk,比如
+		{
+			"group": "apps.test.io",
+			"kind": "Bucket",
+			"version": "v1"
+		}
+	*/
 	gvk := metav1.GroupVersionKind{}
 	gvk.Group, err = v.Lookup("group").String()
 	if err != nil {
@@ -417,6 +443,20 @@ func getDGVK(v cue.Value) (ret domainGroupVersionKind, err error) {
 }
 
 func convert2DGVK(gvk metav1.GroupVersionKind) domainGroupVersionKind {
+	/*
+		输入: {
+			"group": "apps.test.io",
+			"kind": "Bucket",
+			"version": "v1"
+		}
+		输出: {
+			Version:    "v1"
+			Kind:       "Bucket",
+			APIVersion: "v1",
+			Domain: 	"test.io",
+			Group: 		"apps"
+		}
+	*/
 	ret := domainGroupVersionKind{
 		Version:    gvk.Version,
 		Kind:       gvk.Kind,
