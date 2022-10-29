@@ -29,10 +29,12 @@ import (
 
 // Process processing the http task
 func Process(inst *cue.Instance) (*cue.Instance, error) {
+	// 从inst上找到processing.http字段
 	taskVal := inst.Lookup("processing", "http")
-	if !taskVal.Exists() {
+	if !taskVal.Exists() { // 不存在则直接返回
 		return inst, errors.New("there is no http in processing")
 	}
+	// 存在则执行
 	resp, err := exec(taskVal)
 	if err != nil {
 		return nil, fmt.Errorf("fail to exec http task, %w", err)

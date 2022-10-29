@@ -246,13 +246,17 @@ func isStrategyRetainKeys(node *ast.Field) bool {
 
 // IsJSONMergePatch check if patcher is json merge patch
 func IsJSONMergePatch(patcher cue.Value) bool {
+	// 从pather的ast注释节点上获取patch的方式
 	tags := findCommentTag(patcher.Doc())
+	// 如果patch方式中包含patchStrategy且patchStrategy为jsonMergePatch，则返回true
 	return tags[TagPatchStrategy] == StrategyJSONMergePatch
 }
 
 // IsJSONPatch check if patcher is json patch
 func IsJSONPatch(patcher cue.Value) bool {
+	// 从pather的ast注释节点上获取patch的方式
 	tags := findCommentTag(patcher.Doc())
+	// 如果patch方式中包含patchStrategy且patchStrategy为jsonPatch，则返回true
 	return tags[TagPatchStrategy] == StrategyJSONPatch
 }
 
@@ -325,17 +329,22 @@ func strategyUnify(baseFile *ast.File, patchFile *ast.File, params *UnifyParams,
 func findCommentTag(commentGroup []*ast.CommentGroup) map[string]string {
 	marker := "+"
 	kval := map[string]string{}
-	for _, group := range commentGroup {
+	for _, group := range commentGroup { // 注释分组逻辑还没搞明白
+		// 遍历所有的注释行
 		for _, lineT := range group.List {
+			// 拿到原始的注释行文本, 移除开头的//以及开头、结尾的空格
 			line := lineT.Text
 			line = strings.TrimPrefix(line, "//")
 			line = strings.TrimSpace(line)
+			// 移除字符如果为空跳过
 			if len(line) == 0 {
 				continue
 			}
+			// 注释行如果不是以+开头跳过
 			if !strings.HasPrefix(line, marker) {
 				continue
 			}
+			// 跳过marker将marker之后的部分按照=分割, 一分为二
 			kv := strings.SplitN(line[len(marker):], "=", 2)
 			if len(kv) == 2 {
 				val := strings.TrimSpace(kv[1])

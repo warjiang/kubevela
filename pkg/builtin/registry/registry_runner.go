@@ -27,6 +27,8 @@ import (
 )
 
 // Meta provides context for running a task.
+// meta主要封装从cue.Value上获取参数的过程，一般情况下从cue.Value上获取参数一般都是执行一次Lookup操作
+// 然后还需要完成一次类型转换，这个过程没必要且比较琐碎所以提取了这个Meta类，其实内部还是从传入的cue.Value上取值
 type Meta struct {
 	Context context.Context
 	Stdin   io.Reader
@@ -100,11 +102,13 @@ type Runner interface {
 
 // RegisterRunner registers a task for cue commands.
 func RegisterRunner(key string, f RunnerFunc) {
+	// buildin pkg下面所有的包都会有一个init函数, 只要程序启动, 就会执行init函数, 完成注册流程
 	runners.Store(key, f)
 }
 
 // LookupRunner returns the RunnerFunc for a key.
 func LookupRunner(key string) RunnerFunc {
+	// 根据key从runners对象上获取具体的执行函数
 	v, ok := runners.Load(key)
 	if !ok {
 		return nil

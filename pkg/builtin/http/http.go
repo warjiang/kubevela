@@ -55,6 +55,7 @@ func (c *HTTPCmd) Run(meta *registry.Meta) (res interface{}, err error) {
 			Timeout:   time.Second * 3,
 		}
 	)
+	// 复杂情况比如嵌套对象这种情况就需要手动获取cue.Value对象然后手动执行解析操作
 	if obj := meta.Obj.Lookup("request"); obj.Exists() {
 		if v := obj.Lookup("body"); v.Exists() {
 			r, err = v.Reader()
@@ -127,6 +128,15 @@ func (c *HTTPCmd) Run(meta *registry.Meta) (res interface{}, err error) {
 	defer resp.Body.Close()
 	b, err := io.ReadAll(resp.Body)
 	// parse response body and headers
+	/*
+		// 按照map结构返回
+		{
+			"body": "xxxx",
+			"header": map[string]string{},
+			"trailer": map[string]string{},
+			"statusCode": 200,
+		}
+	*/
 	return map[string]interface{}{
 		"body":       string(b),
 		"header":     resp.Header,

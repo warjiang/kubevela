@@ -98,7 +98,9 @@ parameter: {
 			},
 			expectObj: &unstructured.Unstructured{
 				Object: map[string]interface{}{
-					"apiVersion": "apps/v1", "kind": "Deployment", "metadata": map[string]interface{}{"name": "test"},
+					"apiVersion": "apps/v1",
+					"kind":       "Deployment",
+					"metadata":   map[string]interface{}{"name": "test"},
 					"spec": map[string]interface{}{
 						"replicas": int64(2),
 					},
@@ -107,15 +109,20 @@ parameter: {
 			expAssObjs: map[string]runtime.Object{
 				"service": &unstructured.Unstructured{
 					Object: map[string]interface{}{
-						"apiVersion": "v1", "kind": "Service", "metadata": map[string]interface{}{"name": "test"},
-						"spec": map[string]interface{}{"type": "ClusterIP"},
+						"apiVersion": "v1",
+						"kind":       "Service",
+						"metadata":   map[string]interface{}{"name": "test"},
+						"spec":       map[string]interface{}{"type": "ClusterIP"},
 					},
 				},
 				"ingress": &unstructured.Unstructured{
 					Object: map[string]interface{}{
-						"apiVersion": "extensions/v1beta1", "kind": "Ingress", "metadata": map[string]interface{}{
+						"apiVersion": "extensions/v1beta1",
+						"kind":       "Ingress",
+						"metadata": map[string]interface{}{
 							"name": "test",
-						}, "spec": map[string]interface{}{
+						},
+						"spec": map[string]interface{}{
 							"rules": []interface{}{
 								map[string]interface{}{
 									"host": "example.com",
@@ -151,11 +158,15 @@ parameter: {
 			},
 			expectObj: &unstructured.Unstructured{
 				Object: map[string]interface{}{
-					"apiVersion": "apps/v1", "kind": "Deployment", "metadata": map[string]interface{}{
-						"name": "test", "annotations": map[string]interface{}{
+					"apiVersion": "apps/v1",
+					"kind":       "Deployment",
+					"metadata": map[string]interface{}{
+						"name": "test",
+						"annotations": map[string]interface{}{
 							"revision.oam.dev": "myapp-v1",
 						},
-					}, "spec": map[string]interface{}{
+					},
+					"spec": map[string]interface{}{
 						"replicas": int64(2),
 					},
 				},
@@ -179,7 +190,9 @@ parameter: {
 			params: nil,
 			expectObj: &unstructured.Unstructured{
 				Object: map[string]interface{}{
-					"apiVersion": "apps/v1", "kind": "Deployment", "metadata": map[string]interface{}{"name": "test"},
+					"apiVersion": "apps/v1",
+					"kind":       "Deployment",
+					"metadata":   map[string]interface{}{"name": "test"},
 					"spec": map[string]interface{}{
 						"replicas": int64(1),
 					},
@@ -217,6 +230,7 @@ parameter: {
 	}
 
 	for _, v := range testCases {
+		// 构造一个process context
 		ctx := process.NewContext(process.ContextData{
 			AppName:         "myapp",
 			CompName:        "test",
@@ -1063,6 +1077,7 @@ parameter: { errs: [...string] }`,
 	}
 
 `
+		// 构造 process context
 		ctx := process.NewContext(process.ContextData{
 			AppName:         "myapp",
 			CompName:        "test",

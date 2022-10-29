@@ -37,6 +37,7 @@ func RunBuildInTasks(spec map[string]interface{}, io cmdutil.IOStreams) (map[str
 
 // RunTaskByKey do task by key
 func RunTaskByKey(key string, v cue.Value, meta *registry.Meta) (interface{}, error) {
+	// 按照key解析出来对应的task函数
 	task := registry.LookupRunner(key)
 	if task == nil {
 		return nil, errors.New("there is no http task in task registry")

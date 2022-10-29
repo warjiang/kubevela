@@ -118,6 +118,7 @@ func (wd *workloadDef) Complete(ctx process.Context, abstractTemplate string, pa
 		return err
 	}
 
+	// 导入cue包并完成bi对象的构建
 	inst, err := wd.pd.ImportPackagesAndBuildInstance(bi)
 	if err != nil {
 		return err
@@ -126,6 +127,7 @@ func (wd *workloadDef) Complete(ctx process.Context, abstractTemplate string, pa
 	if err := inst.Value().Validate(); err != nil {
 		return errors.WithMessagef(err, "invalid cue template of workload %s after merge parameter and context", wd.name)
 	}
+	// 从cue模板计算出来的值中获取output字段
 	output := inst.Lookup(OutputFieldName)
 	base, err := model.NewBase(output)
 	if err != nil {
@@ -136,6 +138,7 @@ func (wd *workloadDef) Complete(ctx process.Context, abstractTemplate string, pa
 	}
 
 	// we will support outputs for workload composition, and it will become trait in AppConfig.
+	// 解析 outputs 字段
 	outputs := inst.Lookup(OutputsFieldName)
 	if !outputs.Exists() {
 		return nil
@@ -298,10 +301,13 @@ func NewTraitAbstractEngine(name string, pd *packages.PackageDiscover) AbstractE
 
 // Complete do trait definition's rendering
 func (td *traitDef) Complete(ctx process.Context, abstractTemplate string, params interface{}) error {
+	// 构造build instance对象
 	bi := build.NewContext().NewInstance("", nil)
+	// 输入模板先加进来
 	if err := bi.AddFile("-", abstractTemplate); err != nil {
 		return errors.WithMessagef(err, "invalid template of trait %s", td.name)
 	}
+	// 准备基础的paramFile,并写入到bi文件中
 	var paramFile = model.ParameterFieldName + ": {}"
 	if params != nil {
 		bt, err := json.Marshal(params)
@@ -315,6 +321,7 @@ func (td *traitDef) Complete(ctx process.Context, abstractTemplate string, param
 	if err := bi.AddFile(model.ParameterFieldName, paramFile); err != nil {
 		return errors.WithMessagef(err, "invalid parameter of trait %s", td.name)
 	}
+	// 获取process上下文中的变量信息并写入到bi文件中
 	c, err := ctx.ExtendedContextFile()
 	if err != nil {
 		return err
@@ -322,7 +329,7 @@ func (td *traitDef) Complete(ctx process.Context, abstractTemplate string, param
 	if err := bi.AddFile("context", c); err != nil {
 		return errors.WithMessagef(err, "invalid context of trait %s", td.name)
 	}
-
+	// 导包并构建instance实例
 	inst, err := td.pd.ImportPackagesAndBuildInstance(bi)
 	if err != nil {
 		return err
@@ -331,12 +338,14 @@ func (td *traitDef) Complete(ctx process.Context, abstractTemplate string, param
 	if err := inst.Value().Validate(); err != nil {
 		return errors.WithMessagef(err, "invalid template of trait %s after merge with parameter and context", td.name)
 	}
+	// 从cue的结果中找到processing字段
 	processing := inst.Lookup("processing")
 	if processing.Exists() {
 		if inst, err = task.Process(inst); err != nil {
 			return errors.WithMessagef(err, "invalid process of trait %s", td.name)
 		}
 	}
+	// 从cue的结果中找到outputs字段
 	outputs := inst.Lookup(OutputsFieldName)
 	if outputs.Exists() {
 		st, err := outputs.Struct()
@@ -357,7 +366,7 @@ func (td *traitDef) Complete(ctx process.Context, abstractTemplate string, param
 			}
 		}
 	}
-
+	// patch
 	patcher := inst.Lookup(PatchFieldName)
 	base, auxiliaries := ctx.Output()
 	if patcher.Exists() {
@@ -369,6 +378,7 @@ func (td *traitDef) Complete(ctx process.Context, abstractTemplate string, param
 			return errors.WithMessagef(err, "invalid patch trait %s into workload", td.name)
 		}
 	}
+	// patchOutputs
 	outputsPatcher := inst.Lookup(PatchOutputsFieldName)
 	if outputsPatcher.Exists() {
 		for _, auxiliary := range auxiliaries {
@@ -384,7 +394,7 @@ func (td *traitDef) Complete(ctx process.Context, abstractTemplate string, param
 			}
 		}
 	}
-
+	// errs
 	errs := inst.Lookup(ErrsFieldName)
 	if errs.Exists() {
 		if err := parseErrors(errs); err != nil {

@@ -89,10 +89,12 @@ func (inst *instance) Unstructured() (*unstructured.Unstructured, error) {
 
 // Unify implement unity operations between instances
 func (inst *instance) Unify(other Instance, options ...sets.UnifyOption) error {
+	// 对 inst.v 进行patch, patch出来的结果记作pv
 	pv, err := sets.StrategyUnify(inst.v, other.String(), options...)
 	if err != nil {
 		return err
 	}
+	// pv覆盖inst.v
 	inst.v = pv
 	return nil
 }

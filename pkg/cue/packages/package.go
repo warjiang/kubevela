@@ -109,14 +109,18 @@ func (pd *PackageDiscover) ImportBuiltinPackagesFor(bi *build.Instance) {
 func (pd *PackageDiscover) ImportPackagesAndBuildInstance(bi *build.Instance) (inst *cue.Instance, err error) {
 	var r cue.Runtime
 	if pd == nil {
+		// pd是空对象，没啥可 import的, 直接build
 		return r.Build(bi)
 	}
+	// 有pd对象, 先导入vela内置包(vela/op vela/ql)
 	pd.ImportBuiltinPackagesFor(bi)
+	// 导入标准包
 	if err := stdlib.AddImportsFor(bi, ""); err != nil {
 		return nil, err
 	}
 	pd.mutex.Lock()
 	defer pd.mutex.Unlock()
+	// import配置完毕构建~
 	return r.Build(bi)
 }
 
