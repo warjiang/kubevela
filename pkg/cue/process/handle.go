@@ -172,6 +172,33 @@ func (ctx *templateContext) AppendAuxiliaries(auxiliaries ...Auxiliary) error {
 
 // BaseContextFile return cue format string of templateContext
 func (ctx *templateContext) BaseContextFile() (string, error) {
+	/*
+		// 构造基础context对象
+		name: ${ctx.name}
+		appName: ${ctx.appName}
+		appRevision: ${ctx.appRevision}
+		appRevisionNum: ${revNum}
+		namespace: ${ctx.namespace}
+		revision: "KUBEVELA_COMPONENT_REVISION_PLACEHOLDER"
+		workflowName: ${ctx.workflowName}
+		publishVersion: ${ctx.publishVersion}
+		appLabels: ${json.Marshal(ctx.appLabels)}
+		appAnnotations: ${json.Marshal(ctx.appAnnotations)}
+		output: {
+
+		}
+		components: ${json.Marshal(ctx.components)}
+		outputs: auxiliaries:
+			"k1": "v1"
+			"k2": "v2"
+		config: ${json.Marshal(ctx.config)}
+		${secretName1}: ${secrectData1}
+		...
+		${secretNameN}: ${secrectDataN}
+		parameter: ${json.Marshal(ctx.parameters)}
+		outputSecretName: ${ctx.outputSecretName}
+		${..data}
+	*/
 	var buff string
 	buff += fmt.Sprintf(model.ContextName+": \"%s\"\n", ctx.name)
 	buff += fmt.Sprintf(model.ContextAppName+": \"%s\"\n", ctx.appName)
@@ -269,6 +296,12 @@ func (ctx *templateContext) ExtendedContextFile() (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("failed to convert data to application with marshal err %w", err)
 	}
+	/*
+		{...baseContext}
+		secretContextName1: secrectData1
+		...
+		secretContextNameN: secrectDataN
+	*/
 	var bareSecret string
 	if len(ctx.requiredSecrets) > 0 {
 		for _, s := range ctx.requiredSecrets {

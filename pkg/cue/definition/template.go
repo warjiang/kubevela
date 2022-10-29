@@ -91,6 +91,10 @@ func (wd *workloadDef) Complete(ctx process.Context, abstractTemplate string, pa
 	if err := bi.AddFile("-", abstractTemplate); err != nil {
 		return errors.WithMessagef(err, "invalid cue template of workload %s", wd.name)
 	}
+	// 组装 parameter 逻辑，
+	// 默认为 parameter: {}
+	// 如果输入参数不为空，则 parameter: {json.Marshal(params)}
+	// 将 paramFile 写入到 bi 对象中
 	var paramFile = model.ParameterFieldName + ": {}"
 	if params != nil {
 		bt, err := json.Marshal(params)
@@ -104,11 +108,12 @@ func (wd *workloadDef) Complete(ctx process.Context, abstractTemplate string, pa
 	if err := bi.AddFile(model.ParameterFieldName, paramFile); err != nil {
 		return errors.WithMessagef(err, "invalid parameter of workload %s", wd.name)
 	}
-
+	// 获取cue模板需要的基础变量
 	c, err := ctx.ExtendedContextFile()
 	if err != nil {
 		return err
 	}
+	// 基础变量写入到 bi 对象中
 	if err := bi.AddFile("-", c); err != nil {
 		return err
 	}
