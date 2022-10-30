@@ -19,10 +19,10 @@ package types
 // IsBuiltinWorkflowStepType checks if workflow step type is builtin type
 func IsBuiltinWorkflowStepType(wfType string) bool {
 	for _, _type := range []string{
-		WorkflowStepTypeSuspend,
-		WorkflowStepTypeApplyComponent,
-		WorkflowStepTypeBuiltinApplyComponent,
-		WorkflowStepTypeStepGroup,
+		WorkflowStepTypeSuspend, // "suspend"
+		WorkflowStepTypeApplyComponent, // "apply-component"
+		WorkflowStepTypeBuiltinApplyComponent, // "builtin-apply-component"
+		WorkflowStepTypeStepGroup, // "step-group"
 	} {
 		if _type == wfType {
 			return true

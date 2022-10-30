@@ -32,6 +32,7 @@ import (
 // LoadExternalPoliciesForWorkflow detects policies used in workflow steps which are not declared in internal policies
 // try to load them from external policy objects in the application's namespace
 func LoadExternalPoliciesForWorkflow(ctx context.Context, cli client.Client, appNs string, steps []v1beta1.WorkflowStep, internalPolicies []v1beta1.AppPolicy) ([]v1beta1.AppPolicy, error) {
+	// internalPolicies 作个副本到 policies, 遍历policies数组，完成数组转map操作
 	policies := internalPolicies
 	policyMap := map[string]struct{}{}
 	for _, policy := range policies {
@@ -39,11 +40,13 @@ func LoadExternalPoliciesForWorkflow(ctx context.Context, cli client.Client, app
 	}
 	// Load extra used policies declared in the workflow step
 	for _, _step := range steps {
+		// 只关心type=deploy且Properties不为空的step
 		if _step.Type == DeployWorkflowStep && _step.Properties != nil {
 			props := DeployWorkflowStepSpec{}
 			if err := utils.StrictUnmarshal(_step.Properties.Raw, &props); err != nil {
 				return nil, errors.Wrapf(err, "invalid WorkflowStep %s", _step.Name)
 			}
+			// 遍历step的policies，如果不在policyMap中，则调用k8s api根据ns/policyName获取policy对象, 一份追加到policy数组中, 一份写入到policyMap中
 			for _, policyName := range props.Policies {
 				if _, found := policyMap[policyName]; !found {
 					po := &v1alpha1.Policy{}

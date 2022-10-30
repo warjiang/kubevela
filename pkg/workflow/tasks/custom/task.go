@@ -53,10 +53,12 @@ type TaskLoader struct {
 
 // GetTaskGenerator get TaskGenerator by name.
 func (t *TaskLoader) GetTaskGenerator(ctx context.Context, name string) (wfTypes.TaskGenerator, error) {
+	// 远程加载template(workflowstepdefinition)
 	templ, err := t.loadTemplate(ctx, name)
 	if err != nil {
 		return nil, err
 	}
+	// template 转 task
 	return t.makeTaskGenerator(templ)
 }
 
@@ -83,6 +85,7 @@ func (tr *taskRunner) Pending(ctx wfContext.Context, stepStatus map[string]commo
 
 // nolint:gocyclo
 func (t *TaskLoader) makeTaskGenerator(templ string) (wfTypes.TaskGenerator, error) {
+	// 闭包函数
 	return func(wfStep v1beta1.WorkflowStep, genOpt *wfTypes.GeneratorOptions) (wfTypes.TaskRunner, error) {
 
 		exec := &executor{

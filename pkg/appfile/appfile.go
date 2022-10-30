@@ -194,6 +194,7 @@ type Appfile struct {
 // internal policies like apply-once, topology, will not render manifests
 func (af *Appfile) GeneratePolicyManifests(ctx context.Context) ([]*unstructured.Unstructured, error) {
 	var manifests []*unstructured.Unstructured
+	// 遍历所有的policy workload得到[]*unstructured.Unstructured数组也即是k8s manifest
 	for _, policy := range af.PolicyWorkloads {
 		un, err := af.generateUnstructured(policy)
 		if err != nil {
@@ -220,6 +221,7 @@ func (af *Appfile) generateUnstructured(workload *Workload) (*unstructured.Unstr
 func generateUnstructuredFromCUEModule(wl *Workload, artifacts []*types.ComponentManifest, ctxData process.ContextData) (*unstructured.Unstructured, error) {
 	pCtx := process.NewContext(ctxData)
 	pCtx.PushData(model.ContextDataArtifacts, prepareArtifactsData(artifacts))
+	// !! 调用具体的engine(其实调用cue)完成解析计算过程
 	if err := wl.EvalContext(pCtx); err != nil {
 		return nil, errors.Wrapf(err, "evaluate base template app=%s in namespace=%s", ctxData.AppName, ctxData.Namespace)
 	}
@@ -548,14 +550,17 @@ func makeWorkloadWithContext(pCtx process.Context, wl *Workload, ns, appName str
 		workload *unstructured.Unstructured
 		err      error
 	)
+	// 拿到cue模板最终计算出来的结果
 	base, _ := pCtx.Output()
 	switch wl.CapabilityCategory {
 	case types.TerraformCategory:
+		// TODO terraform需要重新unify一次
 		workload, err = generateTerraformConfigurationWorkload(wl, ns)
 		if err != nil {
 			return nil, errors.Wrapf(err, "failed to generate Terraform Configuration workload for workload %s", wl.Name)
 		}
 	default:
+		// 默认情况解析成  *unstructured.Unstructured 数据
 		workload, err = base.Unstructured()
 		if err != nil {
 			return nil, errors.Wrapf(err, "evaluate base template component=%s app=%s", wl.Name, appName)
@@ -845,6 +850,7 @@ func generateComponentFromHelmModule(wl *Workload, ctxData process.ContextData) 
 
 // GenerateContextDataFromAppFile generates process context data from app file
 func GenerateContextDataFromAppFile(appfile *Appfile, wlName string) process.ContextData {
+	// 根据appfile构造ContextData, 用于后续的模板渲染
 	data := process.ContextData{
 		Namespace:       appfile.Namespace,
 		AppName:         appfile.Name,

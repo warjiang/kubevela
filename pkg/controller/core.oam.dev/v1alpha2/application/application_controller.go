@@ -149,7 +149,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 	if err != nil {
 		return r.endWithNegativeCondition(logCtx, app, condition.ReconcileError(err), common.ApplicationStarting)
 	}
-	// TODO 删除逻辑还需要再跟一下
+	// 处理下application的finalizer逻辑
 	endReconcile, result, err := r.handleFinalizers(logCtx, app, handler)
 	if err != nil {
 		if app.GetDeletionTimestamp() == nil {
@@ -365,10 +365,15 @@ func (r *Reconciler) result(err error) *reconcileResult {
 // by setting application(namespace-scoped) as their owners.
 // We must delete all resource trackers related to an application through finalizer logic.
 func (r *Reconciler) handleFinalizers(ctx monitorContext.Context, app *v1beta1.Application, handler *AppHandler) (bool, ctrl.Result, error) {
+	// k8s 内部的资源本来都是离散存储的，但实际应用中资源之间往往都是以单元、组合的形式出现，很有可能出现父、子资源这种级联关系
+	// k8s 提供了finalizer和ownerReference的两种机制来实现资源之间的级联控制
+	// kubevela采用了前者手动管理资源之间的级联关系手动处理资源释放逻辑
 	// 检查 DeletionTimestamp 以确定对象是否在删除中
+	// 这里和数据库里面deleted_at思路类似，如果delete_at为空表示该条记录已经删除
 	if app.ObjectMeta.DeletionTimestamp.IsZero() {
 		// 如果当前对象没有 finalizer， 说明其没有处于正被删除的状态。
 		// resourceTrackerFinalizer => "app.oam.dev/resource-tracker-finalizer"
+		// 如果kubevela管理的资源上面没有finalizer则手动增加一个kubevela的finalizer
 		if !meta.FinalizerExists(app, resourceTrackerFinalizer) {
 			subCtx := ctx.Fork("handle-finalizers", monitorContext.DurationMetric(func(v float64) {
 				metrics.HandleFinalizersDurationHistogram.WithLabelValues("application", "add").Observe(v)
@@ -380,7 +385,7 @@ func (r *Reconciler) handleFinalizers(ctx monitorContext.Context, app *v1beta1.A
 			return r.result(errors.Wrap(r.Client.Update(ctx, app), errUpdateApplicationFinalizer)).end(endReconcile)
 		}
 	} else {
-		// app对象将要被删除
+		// app对象已经被标记为删除
 		if meta.FinalizerExists(app, resourceTrackerFinalizer) {
 			subCtx := ctx.Fork("handle-finalizers", monitorContext.DurationMetric(func(v float64) {
 				metrics.HandleFinalizersDurationHistogram.WithLabelValues("application", "remove").Observe(v)

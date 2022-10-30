@@ -23,6 +23,7 @@ import (
 
 // ConvertSteps convert common steps in to v1beta1 steps for compatibility
 func ConvertSteps(steps []common.WorkflowStep) []v1beta1.WorkflowStep {
+	// []common.WorkflowStep -> []v1beta1.WorkflowStep
 	var _steps []v1beta1.WorkflowStep
 	for _, step := range steps {
 		_steps = append(_steps, v1beta1.WorkflowStep(step))

@@ -33,6 +33,7 @@ import (
 
 // ParseOverridePolicyRelatedDefinitions get definitions inside override policy
 func ParseOverridePolicyRelatedDefinitions(ctx context.Context, cli client.Client, app *v1beta1.Application, policy v1beta1.AppPolicy) (compDefs []*v1beta1.ComponentDefinition, traitDefs []*v1beta1.TraitDefinition, err error) {
+	// 校验 properties 并执行反序列化到 OverridePolicySpec 上
 	if policy.Properties == nil {
 		return compDefs, traitDefs, fmt.Errorf("override policy %s must not have empty properties", policy.Name)
 	}
@@ -40,6 +41,7 @@ func ParseOverridePolicyRelatedDefinitions(ctx context.Context, cli client.Clien
 	if err = json.Unmarshal(policy.Properties.Raw, spec); err != nil {
 		return nil, nil, errors.Wrapf(err, "invalid override policy spec")
 	}
+	// 遍历spec中的Component以及Component下的所有的Trait将Componet.Type和Trait.Type拉平后保存在componentTypes和
 	componentTypes := map[string]struct{}{}
 	traitTypes := map[string]struct{}{}
 	for _, comp := range spec.Components {
@@ -52,6 +54,7 @@ func ParseOverridePolicyRelatedDefinitions(ctx context.Context, cli client.Clien
 			}
 		}
 	}
+	// getDef 负责从vela-system/{app.Namespace}中根据name获取对应的definition
 	getDef := func(name string, _type string, obj client.Object) error {
 		err = cli.Get(ctx, types.NamespacedName{Namespace: oam.SystemDefinitonNamespace, Name: name}, obj)
 		if err != nil && errors2.IsNotFound(err) {
@@ -62,6 +65,7 @@ func ParseOverridePolicyRelatedDefinitions(ctx context.Context, cli client.Clien
 		}
 		return nil
 	}
+	// 遍历componentTypes和traitTypes，分别获取对应的definition
 	for compDefName := range componentTypes {
 		def := &v1beta1.ComponentDefinition{}
 		if err = getDef(compDefName, "component", def); err != nil {

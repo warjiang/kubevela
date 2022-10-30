@@ -44,6 +44,8 @@ type ChainWorkflowStepGenerator struct {
 
 // Generate generate workflow steps
 func (g *ChainWorkflowStepGenerator) Generate(app *v1beta1.Application, existingSteps []v1beta1.WorkflowStep) (steps []v1beta1.WorkflowStep, err error) {
+	// 输入existingSteps,一般为空数组
+	// 遍历所有的step generator, 传入app和existingSteps，返回最新的steps, 迭代完所有的step generator即可得到最终的steps
 	steps = existingSteps
 	for _, generator := range g.generators {
 		steps, err = generator.Generate(app, steps)
@@ -56,6 +58,7 @@ func (g *ChainWorkflowStepGenerator) Generate(app *v1beta1.Application, existing
 
 // NewChainWorkflowStepGenerator create ChainWorkflowStepGenerator
 func NewChainWorkflowStepGenerator(generators ...WorkflowStepGenerator) WorkflowStepGenerator {
+	// 先收集所有的 step generator
 	return &ChainWorkflowStepGenerator{generators: generators}
 }
 
@@ -68,7 +71,9 @@ type RefWorkflowStepGenerator struct {
 // Generate generate workflow steps
 func (g *RefWorkflowStepGenerator) Generate(app *v1beta1.Application, existingSteps []v1beta1.WorkflowStep) (steps []v1beta1.WorkflowStep, err error) {
 	// TODO refwork flow怎么用还不清楚呢-_-
+	// 这里 ref workflow 应该是创建 application 时候创建的关联的workflow, application.Spec.Workflow.Ref 仅仅是关联该workflow
 	if app.Spec.Workflow == nil || app.Spec.Workflow.Ref == "" {
+		// 新创建的application应该都是这个逻辑，直接返回
 		return existingSteps, nil
 	}
 	if app.Spec.Workflow.Steps != nil {
@@ -78,6 +83,7 @@ func (g *RefWorkflowStepGenerator) Generate(app *v1beta1.Application, existingSt
 	if err = g.Client.Get(g.Context, types.NamespacedName{Namespace: app.GetNamespace(), Name: app.Spec.Workflow.Ref}, wf); err != nil {
 		return
 	}
+	// 传入当前wf.Steps遍历数组、强转类型，转换成v1beta1.WorkflowStep[]
 	return ConvertSteps(wf.Steps), nil
 }
 
@@ -89,6 +95,7 @@ func (g *ApplyComponentWorkflowStepGenerator) Generate(app *v1beta1.Application,
 	if len(existingSteps) > 0 {
 		return existingSteps, nil
 	}
+	// 为所有的component生成
 	for _, comp := range app.Spec.Components {
 		steps = append(steps, v1beta1.WorkflowStep{
 			Name: comp.Name,
@@ -110,6 +117,7 @@ func (g *Deploy2EnvWorkflowStepGenerator) Generate(app *v1beta1.Application, exi
 		return existingSteps, nil
 	}
 	// 遍历所有的policy
+	// 所有policy下的"env-binding"类型的项都会转换成deploy2env的workflow step
 	for _, policy := range app.Spec.Policies {
 		// 找 type="env-binding" 的policy 且 Properties 不为空的case
 		if policy.Type == v1alpha1.EnvBindingPolicyType && policy.Properties != nil {
@@ -158,6 +166,7 @@ func (g *DeployWorkflowStepGenerator) Generate(app *v1beta1.Application, existin
 			overrides = append(overrides, policy.Name)
 		}
 	}
+	// 遍历所有的topology,为每个topology创建一个deploy类型的step
 	for _, topology := range topologies {
 		// topology -> workflow step
 		steps = append(steps, v1beta1.WorkflowStep{
@@ -184,7 +193,9 @@ func (g *DeployWorkflowStepGenerator) Generate(app *v1beta1.Application, existin
 			steps = append(steps, v1beta1.WorkflowStep{
 				Name:       "deploy",
 				Type:       "deploy",
-				Properties: util.Object2RawExtension(map[string]interface{}{"policies": append([]string{}, overrides...)}),
+				Properties: util.Object2RawExtension(map[string]interface{}{
+					"policies": append([]string{}, overrides...),
+				}),
 			})
 		}
 	}
@@ -198,11 +209,13 @@ type DeployPreApproveWorkflowStepGenerator struct{}
 func (g *DeployPreApproveWorkflowStepGenerator) Generate(app *v1beta1.Application, existingSteps []v1beta1.WorkflowStep) (steps []v1beta1.WorkflowStep, err error) {
 	lastSuspend := false
 	for _, step := range existingSteps {
+		// 只处理type=deploy的step
 		if step.Type == "deploy" && !lastSuspend {
 			props := DeployWorkflowStepSpec{}
 			if step.Properties != nil {
 				_ = utils.StrictUnmarshal(step.Properties.Raw, &props)
 			}
+			// 如果step没配置Auto字段，则表示默认放行。如果配置了Auto字段，且Auto字段为false的话，则插入一个type=suspend的step
 			if props.Auto != nil && !*props.Auto {
 				steps = append(steps, v1beta1.WorkflowStep{
 					Name: "manual-approve-" + step.Name,
@@ -210,7 +223,9 @@ func (g *DeployPreApproveWorkflowStepGenerator) Generate(app *v1beta1.Applicatio
 				})
 			}
 		}
+		// 更新lastSuspend，如果前面已经有一个type=suspend的step，则lastSuspend为true,后面暂时不需要插入type=suspend的step
 		lastSuspend = step.Type == wftypes.WorkflowStepTypeSuspend
+		// 无论是否需要suspend都得将当前step插入到steps列表中
 		steps = append(steps, step)
 	}
 	return steps, nil

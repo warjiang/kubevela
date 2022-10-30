@@ -104,6 +104,7 @@ func (h *AppHandler) Dispatch(ctx context.Context, cluster string, owner common.
 				APIVersion: mf.GetAPIVersion(),
 			},
 		}
+		// 记录ref关系到AppHandler的appliedResources中(里面有去重逻辑)
 		h.addAppliedResource(false, ref)
 	}
 	return nil

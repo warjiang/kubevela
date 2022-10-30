@@ -838,6 +838,7 @@ func (h *AppHandler) FinalizeAndApplyAppRevision(ctx context.Context) error {
 		oam.LabelAppRevisionHash: h.currentRevHash,
 	})
 	// ApplicationRevision must use Application as ctrl-owner
+	// ApplicationRevision 从属于 Application, Application 删除后 ApplicationRevision 也会被删除
 	appRev.SetOwnerReferences([]metav1.OwnerReference{{
 		APIVersion: v1beta1.SchemeGroupVersion.String(),
 		Kind:       v1beta1.ApplicationKind,
@@ -1044,6 +1045,7 @@ func (h *AppHandler) UpdateApplicationRevisionStatus(ctx context.Context, appRev
 	if appRev == nil || DisableAllApplicationRevision {
 		return
 	}
+	// workflow 写到 ApplicationRevision 的 status 中了？
 	appRev.Status.Succeeded = succeed
 	appRev.Status.Workflow = wfStatus
 	if err := h.r.Client.Status().Update(ctx, appRev); err != nil {

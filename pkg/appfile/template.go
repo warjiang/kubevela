@@ -69,7 +69,7 @@ type Template struct {
 // LoadTemplate gets the capability definition from cluster and resolve it.
 // It returns a helper struct, Template, which will be used for further
 // processing.
-// 根据capType/capName获取对应的模板定义
+// 根据 capType/capName获取对应的模板定义
 // 假如 capType="componentDefinition" capName="webservice" 其效果等效于 kubectl get comp/webservice -n vela-system -oyaml
 // 启动 comp 可以从componentDefinition CRD中拿到
 func LoadTemplate(ctx context.Context, dm discoverymapper.DiscoveryMapper, cli client.Reader, capName string, capType types.CapType) (*Template, error) {

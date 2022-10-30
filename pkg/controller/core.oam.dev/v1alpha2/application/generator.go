@@ -87,6 +87,7 @@ func (h *AppHandler) GenerateApplicationSteps(ctx monitorContext.Context,
 	})
 	query.Install(handlerProviders, h.r.Client, nil)
 
+	// workflow steps 转换成 task runners
 	var tasks []wfTypes.TaskRunner
 	for _, step := range af.WorkflowSteps {
 		task, err := generateStep(ctx, app, step, taskDiscover, h.r.pd, pCtx, "")
@@ -113,6 +114,7 @@ func generateStep(ctx context.Context,
 	generatorName := step.Type
 	switch {
 	case generatorName == wfTypes.WorkflowStepTypeApplyComponent:
+		// "apply-component" 映射成 "builtin-apply-component"
 		generatorName = wfTypes.WorkflowStepTypeBuiltinApplyComponent
 		options.StepConvertor = func(lstep v1beta1.WorkflowStep) (v1beta1.WorkflowStep, error) {
 			copierStep := lstep.DeepCopy()

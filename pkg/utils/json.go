@@ -29,6 +29,7 @@ func DumpJSON(o interface{}) string {
 
 // StrictUnmarshal unmarshal target structure and disallow unknown fields
 func StrictUnmarshal(bs []byte, dest interface{}) error {
+	// 严格空格json中的字段必须和dest中是一致的，不允许出现多余的字段
 	d := json.NewDecoder(bytes.NewReader(bs))
 	d.DisallowUnknownFields()
 	return d.Decode(dest)

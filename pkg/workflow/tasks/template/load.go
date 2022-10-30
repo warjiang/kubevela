@@ -52,11 +52,13 @@ type WorkflowStepLoader struct {
 
 // LoadTaskTemplate gets the workflowStep definition.
 func (loader *WorkflowStepLoader) LoadTaskTemplate(ctx context.Context, name string) (string, error) {
+	// template 通过 go:embed 静态嵌入 pkg/workflow/tasks/template/static 目录
 	files, err := templateFS.ReadDir(templateDir)
 	if err != nil {
 		return "", err
 	}
-
+	// 根据task name组装出cue文件名
+	// 如果找到了cue文件，直接读取返回
 	staticFilename := name + ".cue"
 	for _, file := range files {
 		if staticFilename == file.Name() {
@@ -66,10 +68,12 @@ func (loader *WorkflowStepLoader) LoadTaskTemplate(ctx context.Context, name str
 		}
 	}
 
+	// static目录下找不到对应的cue文件则调用appfile的LoadTemplateFromRevision方法(pkg/appfile/template.go:157)从crd中加载对应的task template
 	templ, err := loader.loadCapabilityDefinition(ctx, name)
 	if err != nil {
 		return "", err
 	}
+	// 返回结果为cue模板
 	schematic := templ.WorkflowStepDefinition.Spec.Schematic
 	if schematic != nil && schematic.CUE != nil {
 		return schematic.CUE.Template, nil
@@ -91,6 +95,7 @@ func NewWorkflowStepTemplateLoader(client client.Client, dm discoverymapper.Disc
 func NewWorkflowStepTemplateRevisionLoader(rev *v1beta1.ApplicationRevision, dm discoverymapper.DiscoveryMapper) Loader {
 	return &WorkflowStepLoader{
 		loadCapabilityDefinition: func(ctx context.Context, capName string) (*appfile.Template, error) {
+			// 写死为 "workflowstep"
 			return appfile.LoadTemplateFromRevision(capName, types.TypeWorkflowStep, rev, dm)
 		},
 	}

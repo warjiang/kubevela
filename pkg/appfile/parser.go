@@ -438,11 +438,13 @@ func (p *Parser) parsePoliciesFromRevision(ctx context.Context, af *Appfile) (er
 }
 
 func (p *Parser) parsePolicies(ctx context.Context, af *Appfile) (err error) {
+	// 加载application.Spec.Policies(包括workflow中引用的和policy字段定义的)
 	af.Policies, err = step.LoadExternalPoliciesForWorkflow(ctx, af.PolicyClient(p.client), af.app.GetNamespace(), af.WorkflowSteps, af.app.Spec.Policies)
 	if err != nil {
 		return err
 	}
 	for _, policy := range af.Policies {
+		// 只有debug policy可以不填properties
 		if policy.Properties == nil && policy.Type != v1alpha1.DebugPolicyType {
 			return fmt.Errorf("policy %s named %s must not have empty properties", policy.Type, policy.Name)
 		}
@@ -459,6 +461,8 @@ func (p *Parser) parsePolicies(ctx context.Context, af *Appfile) (err error) {
 			if err != nil {
 				return err
 			}
+			// componentDefinitions和traintDefinitions转成map
+			// 按照definition.Name -> definition的形式分别保存在RelatedComponentDefinitions和RelatedTraitDefinitions中
 			for _, def := range compDefs {
 				af.RelatedComponentDefinitions[def.Name] = def
 			}
@@ -466,6 +470,7 @@ func (p *Parser) parsePolicies(ctx context.Context, af *Appfile) (err error) {
 				af.RelatedTraitDefinitions[def.Name] = def
 			}
 		default:
+			// 根据 policy/{policy.Type}找到对应的definition,构造出对应的template,并根据template构造出对应的workload
 			w, err := p.makeWorkload(ctx, policy.Name, policy.Type, types.TypePolicy, policy.Properties)
 			if err != nil {
 				return err
@@ -509,13 +514,14 @@ func (p *Parser) parseWorkflowSteps(ctx context.Context, af *Appfile) error {
 	if err := p.loadWorkflowToAppfile(ctx, af); err != nil {
 		return err
 	}
+	// 遍历上面生成的workflow steps,检查每个workflow step的类型是否合法
 	for _, workflowStep := range af.WorkflowSteps {
 		err := p.parseWorkflowStep(ctx, af, workflowStep.Type)
 		if err != nil {
 			return err
 		}
 
-		if workflowStep.SubSteps != nil {
+		if workflowStep.SubSteps != nil { // 如果workflowStep还存在substep的话，继续变量substeps检查所有的substeps是否合法
 			for _, workflowSubStep := range workflowStep.SubSteps {
 				err := p.parseWorkflowStep(ctx, af, workflowSubStep.Type)
 				if err != nil {
@@ -528,16 +534,19 @@ func (p *Parser) parseWorkflowSteps(ctx context.Context, af *Appfile) error {
 }
 
 func (p *Parser) parseWorkflowStep(ctx context.Context, af *Appfile, workflowStepType string) error {
+	// 判断是否为内置的workflow
 	if wftypes.IsBuiltinWorkflowStepType(workflowStepType) {
 		return nil
 	}
+	// 537<->544行，加速判断过程, 如果ReleatedWorkflowStepDefinitions中已经存在了workflowStepType，就不需要再次查询了
 	if _, found := af.RelatedWorkflowStepDefinitions[workflowStepType]; found {
 		return nil
 	}
-	def := &v1beta1.WorkflowStepDefinition{}
+	def := &v1beta1.WorkflowStepDefinition{} // 等效于执行kubectl get workflowstepdefinition/${workflowStepType} -n vela-system,判断解析出来的workflow合法性
 	if err := util.GetCapabilityDefinition(ctx, p.client, def, workflowStepType); err != nil {
 		return errors.Wrapf(err, "failed to get workflow step definition %s", workflowStepType)
 	}
+	// 缓存workflow definition加速后续的执行过程
 	af.RelatedWorkflowStepDefinitions[workflowStepType] = def
 	return nil
 }

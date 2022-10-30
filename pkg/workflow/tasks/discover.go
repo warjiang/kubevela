@@ -56,11 +56,12 @@ type taskDiscover struct {
 
 // GetTaskGenerator get task generator by name.
 func (td *taskDiscover) GetTaskGenerator(ctx context.Context, name string) (types.TaskGenerator, error) {
-
+	// 内置任务直接从builtins中获取对应的genTask函数
 	tg, ok := td.builtins[name]
 	if ok {
 		return tg, nil
 	}
+	// name对应的内置genTask函数不存在尝试从远程加载
 	if td.remoteTaskDiscover != nil {
 		var err error
 		tg, err = td.remoteTaskDiscover.GetTaskGenerator(ctx, name)
@@ -105,6 +106,8 @@ func newTaskDiscover(ctx monitorContext.Context, providerHandlers providers.Prov
 
 	return &taskDiscover{
 		builtins: map[string]types.TaskGenerator{
+			// "suspend" -> suspend,
+			// "step-group" -> StepGroup,
 			types.WorkflowStepTypeSuspend:   suspend,
 			types.WorkflowStepTypeStepGroup: StepGroup,
 		},
