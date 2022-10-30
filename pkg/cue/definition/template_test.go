@@ -294,27 +294,46 @@ parameter: {
 						"replicas": int64(2),
 						"selector": map[string]interface{}{
 							"matchLabels": map[string]interface{}{
-								"app.oam.dev/component": "test"}},
+								"app.oam.dev/component": "test",
+							},
+						},
 						"template": map[string]interface{}{
 							"metadata": map[string]interface{}{
 								"labels": map[string]interface{}{"app.oam.dev/component": "test"},
 							},
 							"spec": map[string]interface{}{
-								"containers": []interface{}{map[string]interface{}{
-									"envFrom": []interface{}{map[string]interface{}{
-										"configMapRef": map[string]interface{}{"name": "testgame-config"},
-									}},
-									"image": "website:0.1",
-									"name":  "main",
-									"ports": []interface{}{map[string]interface{}{"containerPort": int64(443)}}},
-									map[string]interface{}{"image": "metrics-agent:0.2", "name": "sidecar"}}}}}},
+								"containers": []interface{}{
+									map[string]interface{}{
+										"envFrom": []interface{}{
+											map[string]interface{}{
+												"configMapRef": map[string]interface{}{"name": "testgame-config"},
+											},
+										},
+										"image": "website:0.1",
+										"name":  "main",
+										"ports": []interface{}{
+											map[string]interface{}{"containerPort": int64(443)},
+										},
+									},
+									map[string]interface{}{"image": "metrics-agent:0.2", "name": "sidecar"}},
+							},
+						},
+					},
+				},
 			},
 			expAssObjs: map[string]runtime.Object{
 				"AuxiliaryWorkloadgameconfig": &unstructured.Unstructured{
 					Object: map[string]interface{}{
 						"apiVersion": "v1",
 						"kind":       "ConfigMap",
-						"metadata":   map[string]interface{}{"name": "testgame-config"}, "data": map[string]interface{}{"enemies": "enemies-data", "lives": "lives-data"}},
+						"metadata": map[string]interface{}{
+							"name": "testgame-config",
+						},
+						"data": map[string]interface{}{
+							"enemies": "enemies-data",
+							"lives":   "lives-data",
+						},
+					},
 				},
 			},
 		},
@@ -1022,6 +1041,9 @@ parameter: { errs: [...string] }`,
 	}
 
 	for cassinfo, v := range tds {
+		if cassinfo != "patch trait" {
+			continue
+		}
 		baseTemplate := `
 	output: {
       	apiVersion: "apps/v1"
