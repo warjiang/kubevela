@@ -68,7 +68,8 @@ func (h *AppHandler) GenerateApplicationSteps(ctx monitorContext.Context,
 
 	handlerProviders := providers.NewProviders()
 	kube.Install(handlerProviders, app, h.r.Client, h.Dispatch, h.Delete)
-	oamProvider.Install(handlerProviders, app, af, h.r.Client,
+	oamProvider.Install(
+		handlerProviders, app, af, h.r.Client,
 		h.applyComponentFunc(appParser, appRev, af),
 		h.renderComponentFunc(appParser, appRev, af),
 	)
