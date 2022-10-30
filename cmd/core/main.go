@@ -88,7 +88,7 @@ func main() {
 	var enableClusterGateway bool
 	var enableClusterMetrics bool
 	var clusterMetricsInterval time.Duration
-
+	// 参考kubevela启动参数说明: https://kubevela.io/zh/docs/platform-engineers/system-operation/bootstrap-parameters
 	flag.BoolVar(&useWebhook, "use-webhook", false, "Enable Admission Webhook")
 	flag.StringVar(&certDir, "webhook-cert-dir", "/k8s-webhook-server/serving-certs", "Admission webhook cert/key dir.")
 	flag.IntVar(&webhookPort, "webhook-port", 9443, "admission webhook listen address")

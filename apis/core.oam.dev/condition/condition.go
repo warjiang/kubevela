@@ -138,6 +138,7 @@ func (s *ConditionedStatus) GetCondition(ct ConditionType) Condition {
 // of the same type. This is a no-op if all supplied conditions are identical,
 // ignoring the last transition time, to those already set.
 func (s *ConditionedStatus) SetConditions(c ...Condition) {
+	// 输入的condtion追加写入到s.Conditions中，如果已经存在，则(去重)跳过
 	for _, new := range c {
 		exists := false
 		for i, existing := range s.Conditions {

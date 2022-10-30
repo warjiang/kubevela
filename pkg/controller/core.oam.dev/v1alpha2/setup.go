@@ -30,6 +30,8 @@ import (
 
 // Setup workload controllers.
 func Setup(mgr ctrl.Manager, args controller.Args) error {
+	// 参考 cmd/core/main.go:127 不提供参数的情况下，默认启用的就是这个 controller
+	// helm中的values.yaml的默认值也是v0.3
 	switch args.OAMSpecVer {
 	case "all":
 		for _, setup := range []func(ctrl.Manager, controller.Args) error{
@@ -52,6 +54,7 @@ func Setup(mgr ctrl.Manager, args controller.Args) error {
 			}
 		}
 	case "v0.3":
+		// 默认启动的就是这个
 		for _, setup := range []func(ctrl.Manager, controller.Args) error{
 			application.Setup, traitdefinition.Setup, componentdefinition.Setup, policydefinition.Setup, workflowstepdefinition.Setup,
 		} {

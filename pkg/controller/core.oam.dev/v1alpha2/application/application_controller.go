@@ -105,6 +105,7 @@ type options struct {
 // nolint:gocyclo
 func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	// req => ctrl.Request{Namespace: "default", Name: "vela-nginx"}
+	// 经常调试的时候会报错 ctx timeout 是因为这里设置了默认的 ctx 的超时时间为 3min, 可以通过 --reconcile-timeout=300min 来设置
 	ctx, cancel := context.WithTimeout(ctx, common2.ReconcileTimeout)
 	defer cancel()
 

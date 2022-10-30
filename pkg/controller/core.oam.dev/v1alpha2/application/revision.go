@@ -847,6 +847,7 @@ func (h *AppHandler) FinalizeAndApplyAppRevision(ctx context.Context) error {
 	}})
 
 	gotAppRev := &v1beta1.ApplicationRevision{}
+	// update or create 逻辑在这里！！
 	if err := h.r.Get(ctx, client.ObjectKey{Name: appRev.Name, Namespace: appRev.Namespace}, gotAppRev); err != nil {
 		if apierrors.IsNotFound(err) {
 			return h.r.Create(ctx, appRev)
