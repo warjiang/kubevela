@@ -132,7 +132,7 @@ func (w *workflow) ExecuteSteps(ctx monitorContext.Context, appRev *oamcore.Appl
 		return common.WorkflowStateFinished, nil
 	}
 
-	if needRestart(w.app, appRev.Name) { // 冷启动时需要重启下
+	if needRestart(w.app, appRev.Name) { // 第一次走这里
 		return w.restartWorkflow(ctx, revAndSpecHash)
 	}
 
@@ -202,12 +202,14 @@ func (w *workflow) ExecuteSteps(ctx monitorContext.Context, appRev *oamcore.Appl
 }
 
 func checkWorkflowTerminated(wfStatus *common.WorkflowStatus, allTasksDone bool) bool {
+	// workflow状态为terminated,且所有任务都完成了可以认为是terminated状态
 	// if all tasks are done, and the terminated is true, then the workflow is terminated
 	return wfStatus.Terminated && allTasksDone
 }
 
 func checkWorkflowSuspended(wfStatus *common.WorkflowStatus) bool {
 	// if workflow is suspended and the suspended step is still running, return false to run the suspended step
+	// workflow处于suspend状态, 无论子任务还是子任务的子任务都不能处于执行状态, 则可以认为是出suspend状态，否则为非suspend状态
 	if wfStatus.Suspend {
 		for _, step := range wfStatus.Steps {
 			if step.Type == wfTypes.WorkflowStepTypeSuspend && step.Phase == common.WorkflowStepPhaseRunning {
@@ -270,14 +272,17 @@ func newEngine(ctx monitorContext.Context, wfCtx wfContext.Context, w *workflow,
 	stepDependsOn := make(map[string][]string)
 	if w.app.Spec.Workflow != nil {
 		for _, step := range w.app.Spec.Workflow.Steps {
+			// 处理子一级的step
 			hooks.SetAdditionalNameInStatus(stepStatus, step.Name, step.Properties, stepStatus[step.Name])
 			stepDependsOn[step.Name] = append(stepDependsOn[step.Name], step.DependsOn...)
 			for _, sub := range step.SubSteps {
+				// 处理子二级的step
 				hooks.SetAdditionalNameInStatus(stepStatus, sub.Name, sub.Properties, stepStatus[step.Name])
 				stepDependsOn[sub.Name] = append(stepDependsOn[sub.Name], sub.DependsOn...)
 			}
 		}
 	} else {
+		// workflow为空的情况下，仅收集component的DependsOn信息
 		for _, comp := range w.app.Spec.Components {
 			stepDependsOn[comp.Name] = append(stepDependsOn[comp.Name], comp.DependsOn...)
 		}
@@ -586,16 +591,19 @@ func (e *engine) runAsDAG(taskRunners []wfTypes.TaskRunner, pendingRunners bool)
 			} else if status.Phase == common.WorkflowStepPhasePending {
 				wfCtx.DeleteValueInMemory(wfTypes.ContextPrefixBackoffTimes, stepID)
 			}
+			// 满足条件加入到待执行队列
 			todoTasks = append(todoTasks, tRunner)
 		} else {
 			wfCtx.DeleteValueInMemory(wfTypes.ContextPrefixBackoffTimes, stepID)
 		}
 	}
+	// 如果有待执行任务这里的done一定是false
 	if done {
 		return nil
 	}
 
 	if len(todoTasks) > 0 {
+		// 调用steps方法单步执行待执行任务队列中的任务
 		err := e.steps(todoTasks, true)
 		if err != nil {
 			return err

@@ -170,11 +170,13 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 	app.Status.SetConditions(condition.ReadyCondition("Parsed"))
 	r.Recorder.Event(app, event.Normal(velatypes.ReasonParsed, velatypes.MessageParsed))
 
+	// 根据Appfile生成appRevision对象
 	if err := handler.PrepareCurrentAppRevision(logCtx, appFile); err != nil {
 		logCtx.Error(err, "Failed to prepare app revision")
 		r.Recorder.Event(app, event.Warning(velatypes.ReasonFailedRevision, err))
 		return r.endWithNegativeCondition(logCtx, app, condition.ErrorCondition("Revision", err), common.ApplicationRendering)
 	}
+	// appRevision写入k8s apiserver
 	if err := handler.FinalizeAndApplyAppRevision(logCtx); err != nil {
 		logCtx.Error(err, "Failed to apply app revision")
 		r.Recorder.Event(app, event.Warning(velatypes.ReasonFailedRevision, err))
@@ -185,6 +187,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 	app.Status.SetConditions(condition.ReadyCondition("Revision"))
 	r.Recorder.Event(app, event.Normal(velatypes.ReasonRevisoned, velatypes.MessageRevisioned))
 
+	// 更新Application的Status.LatestRevision
 	if err := handler.UpdateAppLatestRevisionStatus(logCtx); err != nil {
 		logCtx.Error(err, "Failed to update application status")
 		return r.endWithNegativeCondition(logCtx, app, condition.ReconcileError(err), common.ApplicationRendering)

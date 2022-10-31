@@ -1045,7 +1045,7 @@ func (h *AppHandler) UpdateApplicationRevisionStatus(ctx context.Context, appRev
 	if appRev == nil || DisableAllApplicationRevision {
 		return
 	}
-	// workflow 写到 ApplicationRevision 的 status 中了？
+	// workflow 写到 ApplicationRevision 的 status 中并更新到k8s的apiserver中
 	appRev.Status.Succeeded = succeed
 	appRev.Status.Workflow = wfStatus
 	if err := h.r.Client.Status().Update(ctx, appRev); err != nil {

@@ -80,6 +80,7 @@ func (tr *taskRunner) Run(ctx wfContext.Context, options *wfTypes.TaskRunOptions
 
 // Pending check task should be executed or not.
 func (tr *taskRunner) Pending(ctx wfContext.Context, stepStatus map[string]common.StepStatus) (bool, common.StepStatus) {
+	// 检查任务是否需要被执行
 	return tr.checkPending(ctx, stepStatus)
 }
 
@@ -574,6 +575,7 @@ func CheckPending(ctx wfContext.Context, step v1beta1.WorkflowStep, id string, s
 		ID:    id,
 		Name:  step.Name,
 	}
+	// 检查所有的依赖安装情况
 	for _, depend := range step.DependsOn {
 		pStatus.Message = fmt.Sprintf("Pending on DependsOn: %s", depend)
 		if status, ok := stepStatus[depend]; ok {
@@ -584,6 +586,7 @@ func CheckPending(ctx wfContext.Context, step v1beta1.WorkflowStep, id string, s
 			return true, pStatus
 		}
 	}
+	// todo 检查inputs
 	for _, input := range step.Inputs {
 		pStatus.Message = fmt.Sprintf("Pending on Input: %s", input.From)
 		if _, err := ctx.GetVar(strings.Split(input.From, ".")...); err != nil {

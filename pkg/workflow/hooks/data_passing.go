@@ -77,6 +77,7 @@ func SetAdditionalNameInStatus(stepStatus map[string]common.StepStatus, name str
 	if stepStatus == nil || properties == nil {
 		return
 	}
+	// properties 反序列化成 o
 	o := struct {
 		Name      string `json:"name"`
 		Component string `json:"component"`
@@ -88,7 +89,9 @@ func SetAdditionalNameInStatus(stepStatus map[string]common.StepStatus, name str
 	if err := json.Unmarshal(js, &o); err != nil {
 		return
 	}
+	// 默认addionalName为空
 	additionalName := ""
+	// 依次解析o.Name 和 o.ComponentName 并赋值给additionalName
 	switch {
 	case o.Name != "":
 		additionalName = o.Name
@@ -97,6 +100,7 @@ func SetAdditionalNameInStatus(stepStatus map[string]common.StepStatus, name str
 	default:
 		return
 	}
+	// 在stepStatus中维护addionalName到stepStatus的映射关系
 	if _, ok := stepStatus[additionalName]; !ok {
 		stepStatus[additionalName] = status
 		return
