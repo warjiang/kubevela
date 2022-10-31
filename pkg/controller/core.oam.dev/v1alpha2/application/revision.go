@@ -110,10 +110,12 @@ var (
 )
 
 func contextWithComponentNamespace(ctx context.Context, ns string) context.Context {
+	// 设置context上namespace(对应的key为contextKey("component-namespace"))
 	return context.WithValue(ctx, ComponentNamespaceContextKey, ns)
 }
 
 func componentNamespaceFromContext(ctx context.Context) string {
+	// 设置context上解析出对应的namespace
 	ns, _ := ctx.Value(ComponentNamespaceContextKey).(string)
 	return ns
 }
@@ -187,13 +189,14 @@ func SprintComponentManifest(cm *types.ComponentManifest) string {
 // PrepareCurrentAppRevision will generate a pure revision without metadata and rendered result
 // the generated revision will be compare with the last revision to see if there's any difference.
 func (h *AppHandler) PrepareCurrentAppRevision(ctx context.Context, af *appfile.Appfile) error {
+	// 生成不包含metadata和rendered result的纯ApplicationRevision
 	if ctx, ok := ctx.(monitorContext.Context); ok {
 		subCtx := ctx.Fork("prepare-current-appRevision", monitorContext.DurationMetric(func(v float64) {
 			metrics.PrepareCurrentAppRevisionDurationHistogram.WithLabelValues("application").Observe(v)
 		}))
 		defer subCtx.Commit("finish prepare current appRevision")
 	}
-
+	// 如果Appfile上已经挂载过ApplicationRevision, 直接赋值给h并退出
 	if af.AppRevision != nil {
 		h.isNewRevision = false
 		h.latestAppRev = af.AppRevision
@@ -201,7 +204,8 @@ func (h *AppHandler) PrepareCurrentAppRevision(ctx context.Context, af *appfile.
 		h.currentRevHash = af.AppRevisionHash
 		return nil
 	}
-	// 首次创建的时候必然不纯在ApplicationRevision
+	// 首次创建的时候必然不存在ApplicationRevision
+	// 生成ApplicationRevision, 赋值给h并退出
 	appRev, appRevisionHash, err := h.gatherRevisionSpec(af)
 	if err != nil {
 		return err
@@ -231,6 +235,7 @@ func (h *AppHandler) PrepareCurrentAppRevision(ctx context.Context, af *appfile.
 // gatherRevisionSpec will gather all revision spec without metadata and rendered result.
 // the gathered Revision spec will be enough to calculate the hash and compare with the old revision
 func (h *AppHandler) gatherRevisionSpec(af *appfile.Appfile) (*v1beta1.ApplicationRevision, string, error) {
+	// 从Appfile中解析出ApplicationRevision对象
 	copiedApp := h.app.DeepCopy()
 	// We better to remove all object status in the appRevision
 	/*
@@ -331,18 +336,21 @@ func (h *AppHandler) gatherRevisionSpec(af *appfile.Appfile) (*v1beta1.Applicati
 }
 
 func (h *AppHandler) getLatestAppRevision(ctx context.Context) error {
-	if DisableAllApplicationRevision {
+	if DisableAllApplicationRevision { // 开启disable application revision直接跳过获取过程
 		return nil
 	}
+	// application.status.LastestRevision 为空则直接跳过
 	if h.app.Status.LatestRevision == nil || len(h.app.Status.LatestRevision.Name) == 0 {
 		return nil
 	}
+	// 按照apprevname和ns信息获取application revision
 	latestRevName := h.app.Status.LatestRevision.Name
 	latestAppRev := &v1beta1.ApplicationRevision{}
 	if err := h.r.Get(ctx, client.ObjectKey{Name: latestRevName, Namespace: h.app.Namespace}, latestAppRev); err != nil {
 		klog.ErrorS(err, "Failed to get latest app revision", "appRevisionName", latestRevName)
 		return errors.Wrapf(err, "fail to get latest app revision %s", latestRevName)
 	}
+	// 回写到lastestAppRevision
 	h.latestAppRev = latestAppRev
 	return nil
 }
@@ -444,9 +452,10 @@ func (h *AppHandler) currentAppRevIsNew(ctx context.Context) (bool, bool, error)
 	if h.app.Status.LatestRevision == nil || DisableAllApplicationRevision {
 		return true, true, nil
 	}
-
+	// 判断 lastestAppRev 和 currentAppRev 是否一致
 	isLatestRev := deepEqualAppInRevision(h.latestAppRev, h.currentAppRev)
 	if metav1.HasAnnotation(h.app.ObjectMeta, oam.AnnotationAutoUpdate) {
+		// 如果application上包含"app.oam.dev/autoUpdate"注解则需要额外多判断一次 revision 是否一致
 		isLatestRev = h.app.Status.LatestRevision.RevisionHash == h.currentRevHash && DeepEqualRevision(h.latestAppRev, h.currentAppRev)
 	}
 	if h.latestAppRev != nil && oam.GetPublishVersion(h.app) != oam.GetPublishVersion(h.latestAppRev) {

@@ -19,6 +19,7 @@ package oam
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"strings"
 	"sync"
 
@@ -144,6 +145,9 @@ func lookUpValues(v *value.Value, mu *sync.Mutex) (*common.ApplicationComponent,
 		defer mu.Unlock()
 	}
 	compSettings, err := v.LookupValue("value")
+	fmt.Println("=======compSettings========")
+	compSettings.Dump()
+	fmt.Println("=======compSettings========")
 	if err != nil {
 		return nil, nil, "", "", "", err
 	}
@@ -152,19 +156,28 @@ func lookUpValues(v *value.Value, mu *sync.Mutex) (*common.ApplicationComponent,
 	if err := compSettings.UnmarshalTo(comp); err != nil {
 		return nil, nil, "", "", "", err
 	}
+	fmt.Println("=======patch========")
 	patcher, err := v.LookupValue("patch")
+	fmt.Println("=======patch========")
 	if err != nil {
 		patcher = nil
 	}
+	fmt.Println("=======cluster========")
 	clusterName, err := v.GetString("cluster")
+	fmt.Println("=======cluster========")
+
 	if err != nil {
 		clusterName = ""
 	}
+	fmt.Println("=======namespace========")
 	overrideNamespace, err := v.GetString("namespace")
+	fmt.Println("=======namespace========")
 	if err != nil {
 		overrideNamespace = ""
 	}
+	fmt.Println("=======env========")
 	env, err := v.GetString("env")
+	fmt.Println("=======env========")
 	if err != nil {
 		env = ""
 	}

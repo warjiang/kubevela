@@ -268,6 +268,7 @@ func (w *workflow) restartWorkflow(ctx monitorContext.Context, rev string) (comm
 
 func newEngine(ctx monitorContext.Context, wfCtx wfContext.Context, w *workflow, wfStatus *common.WorkflowStatus) *engine {
 	stepStatus := make(map[string]common.StepStatus)
+	// wfStatus.Steps => stepStatus
 	setStepStatus(stepStatus, wfStatus.Steps)
 	stepDependsOn := make(map[string][]string)
 	if w.app.Spec.Workflow != nil {
@@ -302,6 +303,7 @@ func newEngine(ctx monitorContext.Context, wfCtx wfContext.Context, w *workflow,
 }
 
 func setStepStatus(statusMap map[string]common.StepStatus, status []common.WorkflowStepStatus) {
+	// 遍历status数组，转map写入到statusMap中
 	for _, ss := range status {
 		statusMap[ss.Name] = ss.StepStatus
 		for _, sss := range ss.SubStepsStatus {

@@ -164,7 +164,7 @@ func (t *TaskLoader) makeTaskGenerator(templ string) (wfTypes.TaskGenerator, err
 					}
 				}
 			}()
-
+			// pre-check -> pre-start ->
 			for _, hook := range options.PreCheckHooks {
 				result, err := hook(wfStep, &wfTypes.PreCheckOptions{
 					PackageDiscover: t.pd,
@@ -458,6 +458,8 @@ func (exec *executor) Handle(ctx wfContext.Context, provider string, do string, 
 }
 
 func (exec *executor) doSteps(ctx wfContext.Context, v *value.Value) error {
+	v.Dump()
+	v.DumpSyntax()
 	do := OpTpy(v)
 	if do != "" && do != "steps" {
 		provider := opProvider(v)

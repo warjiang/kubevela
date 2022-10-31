@@ -184,12 +184,15 @@ func (wf *WorkflowContext) MakeParameter(parameter interface{}) (*value.Value, e
 
 // Commit the workflow context and persist it's content.
 func (wf *WorkflowContext) Commit() error {
+	// 没有修改不需要提交
 	if !wf.modified {
 		return nil
 	}
+	// 写入到store中
 	if err := wf.writeToStore(); err != nil {
 		return err
 	}
+	// 同步，可能是memory也可能是configmap
 	if err := wf.sync(); err != nil {
 		return errors.WithMessagef(err, "save context to configMap(%s/%s)", wf.store.Namespace, wf.store.Name)
 	}
@@ -197,10 +200,12 @@ func (wf *WorkflowContext) Commit() error {
 }
 
 func (wf *WorkflowContext) writeToStore() error {
+	// 拿到cue模板的输出
 	varStr, err := wf.vars.String()
 	if err != nil {
 		return err
 	}
+	// 记录组件和对应manifest之间的关系
 	jsonObject := map[string]string{}
 	for name, comp := range wf.components {
 		s, err := comp.string()
@@ -209,10 +214,11 @@ func (wf *WorkflowContext) writeToStore() error {
 		}
 		jsonObject[name] = s
 	}
-
+	// 确保Data非空, 一定是一个可用的map
 	if wf.store.Data == nil {
 		wf.store.Data = make(map[string]string)
 	}
+	// 写入store.Data中
 	wf.store.Data[ConfigMapKeyComponents] = string(util.MustJSONMarshal(jsonObject))
 	wf.store.Data[ConfigMapKeyVars] = varStr
 	return nil
@@ -220,9 +226,11 @@ func (wf *WorkflowContext) writeToStore() error {
 
 func (wf *WorkflowContext) sync() error {
 	ctx := context.Background()
+	// 同步到memory的情况
 	if EnableInMemoryContext {
 		MemStore.UpdateInMemoryContext(wf.store)
 	} else if err := wf.cli.Update(ctx, wf.store); err != nil {
+		// 同步workflow到configmap中，不存在就闯将
 		if kerrors.IsNotFound(err) {
 			return wf.cli.Create(ctx, wf.store)
 		}
@@ -350,6 +358,7 @@ func newContext(cli client.Client, ns, app string, appUID types.UID) (*WorkflowC
 	)
 	store.Name = generateStoreName(app)
 	store.Namespace = ns
+	// 设置configmap的ownerReference为application, 便于作资源的释放，比如删除application时，configmap也会被删除
 	store.SetOwnerReferences([]metav1.OwnerReference{
 		{
 			APIVersion: v1beta1.SchemeGroupVersion.String(),
@@ -360,8 +369,11 @@ func newContext(cli client.Client, ns, app string, appUID types.UID) (*WorkflowC
 		},
 	})
 	if EnableInMemoryContext {
+		// 内存版本的workflow context实现
 		MemStore.GetOrCreateInMemoryContext(&store)
 	} else if err := cli.Get(ctx, client.ObjectKey{Name: store.Name, Namespace: store.Namespace}, &store); err != nil {
+		// k8s configmap版本workflow context实现
+		// 不存在创建对应的configmap
 		if kerrors.IsNotFound(err) {
 			if err := cli.Create(ctx, &store); err != nil {
 				return nil, err
@@ -370,6 +382,7 @@ func newContext(cli client.Client, ns, app string, appUID types.UID) (*WorkflowC
 			return nil, err
 		}
 	}
+	// 记录configmap的"vela.io/startTime"标签，用于记录workflow context的创建时间
 	store.Annotations = map[string]string{
 		AnnotationStartTimestamp: time.Now().String(),
 	}
@@ -382,6 +395,7 @@ func newContext(cli client.Client, ns, app string, appUID types.UID) (*WorkflowC
 		modified:    true,
 	}
 	var err error
+	// 塞一个空的cue模板
 	wfCtx.vars, err = value.NewValue("", nil, "")
 
 	return wfCtx, err
@@ -428,5 +442,6 @@ func LoadContext(cli client.Client, ns, app string) (Context, error) {
 
 // generateStoreName generates the config map name of workflow context.
 func generateStoreName(app string) string {
+	// 按照workflow-{appname}-context生成store的名字, 其实就是一个configmap的名字
 	return fmt.Sprintf("workflow-%s-context", app)
 }

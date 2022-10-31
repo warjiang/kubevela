@@ -17,6 +17,7 @@ limitations under the License.
 package value
 
 import (
+	"cuelang.org/go/cue/format"
 	"encoding/json"
 	"fmt"
 	"sort"
@@ -76,6 +77,26 @@ func (val *Value) UnmarshalTo(x interface{}) error {
 		return err
 	}
 	return json.Unmarshal(data, x)
+}
+
+func (val *Value) Dump() error {
+	// dump json to stdout
+	buff, err := val.v.MarshalJSON()
+	if err != nil {
+		return err
+	}
+
+	fmt.Println(string(buff))
+	return nil
+}
+func (val *Value) DumpSyntax() error {
+	// dump syntax to stdout
+	b, err := format.Node(val.v.Syntax())
+	if err != nil {
+		return err
+	}
+	fmt.Println(string(b))
+	return nil
 }
 
 // NewValueWithMainAndFiles new a value from main and appendix files
@@ -520,6 +541,7 @@ func (val *Value) fields() ([]*field, error) {
 	return fields, nil
 }
 
+// 按照no(stpe属性)从小到大排序
 type sortFields []*field
 
 func (sf sortFields) Len() int {

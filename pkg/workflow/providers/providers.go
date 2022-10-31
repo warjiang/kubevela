@@ -52,6 +52,7 @@ func (p *providers) GetHandler(providerName, handleName string) (Handler, bool) 
 
 // Register install provider.
 func (p *providers) Register(provider string, m map[string]Handler) {
+	// pkg/controller/core.oam.dev/v1alpha2/application/generator.go:63
 	p.l.Lock()
 	defer p.l.Unlock()
 	p.m[provider] = m

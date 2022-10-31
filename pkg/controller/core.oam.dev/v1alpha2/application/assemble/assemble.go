@@ -303,6 +303,7 @@ func assembleWorkload(compName string, wl *unstructured.Unstructured,
 	setWorkloadLabels(wl, labels)
 
 	workloadType := wl.GetLabels()[oam.WorkloadTypeLabel]
+	// ApplicationRevision中根据workloadType返回对应的component definition
 	compDefinition := appRev.Spec.ComponentDefinitions[workloadType]
 	copyPackagedResources := make([]*unstructured.Unstructured, len(resources))
 	for i, v := range resources {

@@ -94,6 +94,7 @@ type Workload struct {
 
 // EvalContext eval workload template and set result to context
 func (wl *Workload) EvalContext(ctx process.Context) error {
+	// workload上的engine是真正的cue engine的wrapper
 	return wl.engine.Complete(ctx, wl.FullTemplate.TemplateStr, wl.Params)
 }
 
@@ -273,15 +274,29 @@ func (af *Appfile) GenerateComponentManifests() ([]*types.ComponentManifest, err
 
 // GenerateComponentManifest generate only one ComponentManifest
 func (af *Appfile) GenerateComponentManifest(wl *Workload, mutate func(*process.ContextData)) (*types.ComponentManifest, error) {
+	// 空namespace统一到default
 	if af.Namespace == "" {
 		af.Namespace = corev1.NamespaceDefault
 	}
+	// 根据appfile构造contextData用于后续模板渲染
 	ctxData := GenerateContextDataFromAppFile(af, wl.Name)
+	// mutate 用于辅助操作contextData, 在应用于模板之前生效
 	if mutate != nil {
 		mutate(&ctxData)
 	}
 	// generate context here to avoid nil pointer panic
+	// 根据ctxData构造process.Context
 	wl.Ctx = NewBasicContext(ctxData, wl.Params)
+	/*
+	wl.CapabilityCategory 参数是加载definition的时候检测出来的
+	schematic:
+	    cue:
+		helm:
+		kube:
+		terraform:
+	schematic下那个字段有值就表示当前scheamtic是什么类型
+	具体参考：pkg/appfile/template.go:380
+	*/
 	switch wl.CapabilityCategory {
 	case types.HelmCategory:
 		return generateComponentFromHelmModule(wl, ctxData)
@@ -290,6 +305,7 @@ func (af *Appfile) GenerateComponentManifest(wl *Workload, mutate func(*process.
 	case types.TerraformCategory:
 		return generateComponentFromTerraformModule(wl, af.Name, af.Namespace)
 	default:
+		// 这里分析下cue的模板
 		return generateComponentFromCUEModule(wl, ctxData)
 	}
 }
@@ -460,9 +476,11 @@ func (af *Appfile) setWorkloadRefToTrait(wlRef corev1.ObjectReference, trait *un
 
 // PrepareProcessContext prepares a DSL process Context
 func PrepareProcessContext(wl *Workload, ctxData process.ContextData) (process.Context, error) {
+	// workload上ctx为空则使用传入的process.ContextData
 	if wl.Ctx == nil {
 		wl.Ctx = NewBasicContext(ctxData, wl.Params)
 	}
+	// 计算结果
 	if err := wl.EvalContext(wl.Ctx); err != nil {
 		return nil, errors.Wrapf(err, "evaluate base template app=%s in namespace=%s", ctxData.AppName, ctxData.Namespace)
 	}
@@ -580,7 +598,7 @@ func evalWorkloadWithContext(pCtx process.Context, wl *Workload, ns, appName, co
 	}
 	compManifest.StandardWorkload = workload
 
-	_, assists := pCtx.Output()
+	_, assists := pCtx.Output() // 处理所有的outputs产物
 	compManifest.Traits = make([]*unstructured.Unstructured, len(assists))
 	commonLabels := definition.GetCommonLabels(pCtx.BaseContextLabels())
 	for i, assist := range assists {
