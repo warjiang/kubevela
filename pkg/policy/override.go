@@ -37,11 +37,31 @@ func ParseOverridePolicyRelatedDefinitions(ctx context.Context, cli client.Clien
 	if policy.Properties == nil {
 		return compDefs, traitDefs, fmt.Errorf("override policy %s must not have empty properties", policy.Name)
 	}
+	/*
+	policies:
+	- name: override-nginx-legacy-image
+	  type: override
+	  properties:
+		components:
+		- name: nginx-with-override
+		  properties:
+		    image: nginx:1.20
+	- name: override-high-availability
+	  type: override
+	  properties:
+		components:
+	    - type: webservice
+	      traits:
+	      - type: scaler
+			properties:
+			replicas: 3
+	*/
 	spec := &v1alpha1.OverridePolicySpec{}
 	if err = json.Unmarshal(policy.Properties.Raw, spec); err != nil {
 		return nil, nil, errors.Wrapf(err, "invalid override policy spec")
 	}
-	// 遍历spec中的Component以及Component下的所有的Trait将Componet.Type和Trait.Type拉平后保存在componentTypes和
+	// 遍历spec中的Component以及Component下的所有的Trait将Componet.Type和Trait.Type拉平后保存在componentTypes和traitTypes
+	// 将policy.Spec中关联的component和trait打平后保存到map中
 	componentTypes := map[string]struct{}{}
 	traitTypes := map[string]struct{}{}
 	for _, comp := range spec.Components {

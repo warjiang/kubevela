@@ -222,6 +222,8 @@ func (h *AppHandler) PrepareCurrentAppRevision(ctx context.Context, af *appfile.
 		return err
 	}
 	if h.isNewRevision && needGenerateRevision {
+		// 需要重新生成applicationRevision
+		// revisionName = applicationName + "-" + v1/v2/v3
 		h.currentAppRev.Name, _ = utils.GetAppNextRevision(h.app)
 	}
 
@@ -336,6 +338,7 @@ func (h *AppHandler) gatherRevisionSpec(af *appfile.Appfile) (*v1beta1.Applicati
 }
 
 func (h *AppHandler) getLatestAppRevision(ctx context.Context) error {
+	// 获取application上关联的最新的ApplicationRevision
 	if DisableAllApplicationRevision { // 开启disable application revision直接跳过获取过程
 		return nil
 	}
@@ -358,6 +361,7 @@ func (h *AppHandler) getLatestAppRevision(ctx context.Context) error {
 // ComputeAppRevisionHash computes a single hash value for an appRevision object
 // Spec of Application/WorkloadDefinitions/ComponentDefinitions/TraitDefinitions/ScopeDefinitions will be taken into compute
 func ComputeAppRevisionHash(appRevision *v1beta1.ApplicationRevision) (string, error) {
+	// 计算apprev的hash值
 	// Calculate Hash for New Mode with workflow and policy
 	revHash := struct {
 		ApplicationSpecHash        string
@@ -380,6 +384,7 @@ func ComputeAppRevisionHash(appRevision *v1beta1.ApplicationRevision) (string, e
 		PolicyHash:                 make(map[string]string),
 	}
 	var err error
+	// 过滤掉SkipRevisionAffect=true的trait
 	revHash.ApplicationSpecHash, err = utils.ComputeSpecHash(filterSkipAffectAppRevTrait(appRevision.Spec.Application.Spec, appRevision.Spec.TraitDefinitions))
 	if err != nil {
 		return "", err
@@ -398,6 +403,7 @@ func ComputeAppRevisionHash(appRevision *v1beta1.ApplicationRevision) (string, e
 		}
 		revHash.ComponentDefinitionHash[key] = hash
 	}
+	// 过滤掉SkipRevisionAffect=true的trait
 	for key, td := range filterSkipAffectAppRevTraitDefinitions(appRevision.Spec.TraitDefinitions) {
 		hash, err := utils.ComputeSpecHash(&td.Spec)
 		if err != nil {
@@ -568,6 +574,7 @@ func deepEqualAppSpec(old, new *v1beta1.Application) bool {
 }
 
 func deepEqualAppInRevision(old, new *v1beta1.ApplicationRevision) bool {
+	// 判断ApplicationRevision中的Policies是否相等
 	if len(old.Spec.Policies) != len(new.Spec.Policies) {
 		return false
 	}
@@ -576,6 +583,7 @@ func deepEqualAppInRevision(old, new *v1beta1.ApplicationRevision) bool {
 			return false
 		}
 	}
+	// 判断ApplicationRevision中的Workflow是否相等
 	if (old.Spec.Workflow == nil) != (new.Spec.Workflow == nil) {
 		return false
 	}
@@ -584,6 +592,7 @@ func deepEqualAppInRevision(old, new *v1beta1.ApplicationRevision) bool {
 			return false
 		}
 	}
+	// 检查ApplicationRevision中的Application是否相等
 	oldApp, newApp := old.Spec.Application.DeepCopy(), new.Spec.Application.DeepCopy()
 	oldApp.Spec = filterSkipAffectAppRevTrait(oldApp.Spec, old.Spec.TraitDefinitions)
 	newApp.Spec = filterSkipAffectAppRevTrait(newApp.Spec, new.Spec.TraitDefinitions)
@@ -951,8 +960,10 @@ func replaceComponentRevisionContext(u *unstructured.Unstructured, compRevName s
 // before computing hash or deepEqual, filterSkipAffectAppRevTrait filter can remove `SkipAffectAppRevTrait` trait from appSpec
 func filterSkipAffectAppRevTrait(appSpec v1beta1.ApplicationSpec, tds map[string]v1beta1.TraitDefinition) v1beta1.ApplicationSpec {
 	// deepCopy avoid modify origin appSpec
-	res := appSpec.DeepCopy()
+	res := appSpec.DeepCopy() // 深拷贝
+	// 遍历所有的components对象，过滤掉SkipRevisionAffect=true的trait
 	for index, comp := range res.Components {
+		// Spec.SkipRevisionAffect=false的trait往前移动
 		i := 0
 		for _, trait := range comp.Traits {
 			if !tds[trait.Type].Spec.SkipRevisionAffect {
@@ -960,6 +971,7 @@ func filterSkipAffectAppRevTrait(appSpec v1beta1.ApplicationSpec, tds map[string
 				i++
 			}
 		}
+		// 截断slice完成删除动作
 		res.Components[index].Traits = res.Components[index].Traits[:i]
 	}
 	return *res

@@ -23,6 +23,8 @@ import (
 )
 
 // DelegatingHandlerClient override the original client's function
+// DelegatingHandlerClient 实现了client.Client接口，但是它的Get和List方法是通过委托的方式实现的，如果构造代理对象的时候传入了get和list
+// 方法则get、list是调用用户自己实现的方法否则调用client.CLient的默认实现
 type DelegatingHandlerClient struct {
 	client.Client
 	Getter func(ctx context.Context, key client.ObjectKey, obj client.Object) error

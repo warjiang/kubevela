@@ -36,9 +36,25 @@ func LoadExternalPoliciesForWorkflow(ctx context.Context, cli client.Client, app
 	policies := internalPolicies
 	policyMap := map[string]struct{}{}
 	for _, policy := range policies {
+		// 传入的policies是application.Spec上定义的polocies
 		policyMap[policy.Name] = struct{}{}
 	}
+	/*
 	// Load extra used policies declared in the workflow step
+	// 遍历workflow上所有的policy，只有deploy类型的workflowstep才可能存在policy
+	workflow:
+		steps:
+		- type: deploy
+	      name: deploy-local
+	      properties:
+			policies: ["topology-local"]
+		- type: deploy
+	      name: deploy-hangzhou
+	      properties:
+			# require manual approval before running this step
+			auto: false
+			policies: ["topology-hangzhou-clusters"]
+	*/
 	for _, _step := range steps {
 		// 只关心type=deploy且Properties不为空的step
 		if _step.Type == DeployWorkflowStep && _step.Properties != nil {

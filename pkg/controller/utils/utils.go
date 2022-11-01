@@ -252,6 +252,7 @@ func CompareWithRevision(ctx context.Context, c client.Client, componentName, na
 }
 
 // ComputeSpecHash computes the hash value of a k8s resource spec
+// 计算k8s资源对象的hash值
 func ComputeSpecHash(spec interface{}) (string, error) {
 	// compute a hash value of any resource spec
 	// 根据spec计算hash值

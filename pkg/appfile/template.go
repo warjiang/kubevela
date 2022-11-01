@@ -404,7 +404,7 @@ func loadSchematicToTemplate(tmpl *Template, status *common.Status, schematic *c
 			return nil
 		}
 	}
-	// 如果TemplateStr为空且ext不为空的情况下
+	// 如果TemplateStr为空且ext不为空的情况下(兼容写法，早期有部分cue模板是写在extension.template中，比如docs/examples/kubecondemo/script/webservice.yaml)
 	// 设置类型默认为CUE
 	// 将ext.Raw里面的数据反序列化成map结构extension, 将extension["template"]的值赋给TemplateStr表示模板内容
 	if tmpl.TemplateStr == "" && ext != nil {

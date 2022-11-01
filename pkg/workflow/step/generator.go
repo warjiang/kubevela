@@ -95,7 +95,7 @@ func (g *ApplyComponentWorkflowStepGenerator) Generate(app *v1beta1.Application,
 	if len(existingSteps) > 0 {
 		return existingSteps, nil
 	}
-	// 为所有的component生成
+	// 为所有的component生成 workflow step
 	for _, comp := range app.Spec.Components {
 		steps = append(steps, v1beta1.WorkflowStep{
 			Name: comp.Name,

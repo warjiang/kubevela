@@ -106,6 +106,7 @@ func (p *Parser) GenerateAppFile(ctx context.Context, app *v1beta1.Application) 
 		return p.GenerateAppFileFromRevision(appRev)
 	}
 	// 非最新资源优先使用Application中的数据(第一次必然会命中这个逻辑)
+	// debug 调试的时候似乎每次 "app.oam.dev/publishVersion" 注解都没写入成功，每次都是走这里的逻辑
 	return p.GenerateAppFileFromApp(ctx, app)
 }
 
@@ -135,6 +136,8 @@ func (p *Parser) GenerateAppFileFromApp(ctx context.Context, app *v1beta1.Applic
 	appfile.Components = app.Spec.Components
 
 	var err error
+	// appfile上的关联的资源处理后生成workflow steps回写到appfile上
+	// 比如 appfile 上的 application 存在1个component, 该component就会转换成一个workflow steps
 	if err = p.parseWorkflowSteps(ctx, appfile); err != nil {
 		return nil, errors.Wrapf(err, "failed to parseWorkflowSteps")
 	}
@@ -463,6 +466,7 @@ func (p *Parser) parsePolicies(ctx context.Context, af *Appfile) (err error) {
 			}
 			// componentDefinitions和traintDefinitions转成map
 			// 按照definition.Name -> definition的形式分别保存在RelatedComponentDefinitions和RelatedTraitDefinitions中
+			// policies中关联的definition回写到appfile中
 			for _, def := range compDefs {
 				af.RelatedComponentDefinitions[def.Name] = def
 			}
@@ -471,6 +475,7 @@ func (p *Parser) parsePolicies(ctx context.Context, af *Appfile) (err error) {
 			}
 		default:
 			// 根据 policy/{policy.Type}找到对应的definition,构造出对应的template,并根据template构造出对应的workload
+			// 基本上不太会走到这里，除非是用户自定义的policy, 推测这里是默认认为用户的policy就是一个workload
 			w, err := p.makeWorkload(ctx, policy.Name, policy.Type, types.TypePolicy, policy.Properties)
 			if err != nil {
 				return err
@@ -533,6 +538,7 @@ func (p *Parser) parseWorkflowSteps(ctx context.Context, af *Appfile) error {
 	return nil
 }
 
+// parseWorkflowStep 检查每个workflow 是否都存在对应的 definition
 func (p *Parser) parseWorkflowStep(ctx context.Context, af *Appfile, workflowStepType string) error {
 	// 判断是否为内置的workflow
 	if wftypes.IsBuiltinWorkflowStepType(workflowStepType) {
@@ -628,6 +634,7 @@ func (p *Parser) parseWorkload(ctx context.Context, comp common.ApplicationCompo
 			}
 	*/
 	// 根据输入的component构造workload
+	// 内部会根据 componentDefinition/{comp.Type} 先获取到 component definition,
 	workload, err := p.makeWorkload(ctx, comp.Name, comp.Type, types.TypeComponentDefinition, comp.Properties)
 	if err != nil {
 		return nil, err
