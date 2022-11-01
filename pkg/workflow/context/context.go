@@ -96,10 +96,12 @@ func (wf *WorkflowContext) GetVar(paths ...string) (*value.Value, error) {
 
 // SetVar set variable to workflow context.
 func (wf *WorkflowContext) SetVar(v *value.Value, paths ...string) error {
+	// cue value.Value 转成 string
 	str, err := v.String()
 	if err != nil {
 		return errors.WithMessage(err, "compile var")
 	}
+	// 这里等效于 workflow.vars[metadata__] = str
 	if err := wf.vars.FillRaw(str, paths...); err != nil {
 		return err
 	}
@@ -137,6 +139,7 @@ func (wf *WorkflowContext) DeleteMutableValue(paths ...string) {
 
 // IncreaseCountValueInMemory increase count in workflow context memory store.
 func (wf *WorkflowContext) IncreaseCountValueInMemory(paths ...string) int {
+	// 构造  backoff_times.{stepStatusId}
 	key := strings.Join(paths, ".")
 	c, ok := wf.memoryStore.Load(key)
 	if !ok {
@@ -155,6 +158,7 @@ func (wf *WorkflowContext) IncreaseCountValueInMemory(paths ...string) int {
 
 // SetValueInMemory set data in workflow context memory store.
 func (wf *WorkflowContext) SetValueInMemory(data interface{}, paths ...string) {
+	//  "last_execute_time" => now.Unix()
 	wf.memoryStore.Store(strings.Join(paths, "."), data)
 }
 
@@ -188,7 +192,7 @@ func (wf *WorkflowContext) Commit() error {
 	if !wf.modified {
 		return nil
 	}
-	// 写入到store中
+	// 写入到store中，这里是
 	if err := wf.writeToStore(); err != nil {
 		return err
 	}
@@ -205,8 +209,9 @@ func (wf *WorkflowContext) writeToStore() error {
 	if err != nil {
 		return err
 	}
-	// 记录组件和对应manifest之间的关系
+	// 构建内存中的map结构
 	jsonObject := map[string]string{}
+	// 遍历所有的component，按照 component name -> component mainifest的结构存储
 	for name, comp := range wf.components {
 		s, err := comp.string()
 		if err != nil {
@@ -219,8 +224,8 @@ func (wf *WorkflowContext) writeToStore() error {
 		wf.store.Data = make(map[string]string)
 	}
 	// 写入store.Data中
-	wf.store.Data[ConfigMapKeyComponents] = string(util.MustJSONMarshal(jsonObject))
-	wf.store.Data[ConfigMapKeyVars] = varStr
+	wf.store.Data[ConfigMapKeyComponents] = string(util.MustJSONMarshal(jsonObject)) // "components"
+	wf.store.Data[ConfigMapKeyVars] = varStr // "vars"
 	return nil
 }
 
@@ -230,7 +235,7 @@ func (wf *WorkflowContext) sync() error {
 	if EnableInMemoryContext {
 		MemStore.UpdateInMemoryContext(wf.store)
 	} else if err := wf.cli.Update(ctx, wf.store); err != nil {
-		// 同步workflow到configmap中，不存在就闯将
+		// 同步workflow到configmap中，不存在就创建
 		if kerrors.IsNotFound(err) {
 			return wf.cli.Create(ctx, wf.store)
 		}
@@ -356,6 +361,7 @@ func newContext(cli client.Client, ns, app string, appUID types.UID) (*WorkflowC
 		ctx   = context.Background()
 		store corev1.ConfigMap
 	)
+	// 生成configmap名字: workflow-{app name}-context
 	store.Name = generateStoreName(app)
 	store.Namespace = ns
 	// 设置configmap的ownerReference为application, 便于作资源的释放，比如删除application时，configmap也会被删除
@@ -386,6 +392,8 @@ func newContext(cli client.Client, ns, app string, appUID types.UID) (*WorkflowC
 	store.Annotations = map[string]string{
 		AnnotationStartTimestamp: time.Now().String(),
 	}
+	// workflowMemoryCache上为每个workflow context创建一个sync.map结构
+	// key的生成规则为: {app}-{ns}, 比如 vela-nginx-default
 	memCache := getMemoryStore(fmt.Sprintf("%s-%s", app, ns))
 	wfCtx := &WorkflowContext{
 		cli:         cli,
@@ -395,13 +403,17 @@ func newContext(cli client.Client, ns, app string, appUID types.UID) (*WorkflowC
 		modified:    true,
 	}
 	var err error
-	// 塞一个空的cue模板
+	// 塞一个空的cue模板, 表示一个value对象
 	wfCtx.vars, err = value.NewValue("", nil, "")
 
 	return wfCtx, err
 }
 
 func getMemoryStore(key string) *sync.Map {
+	/*
+	workflowMemoryCache结构
+	key -> sync.map{}
+	*/
 	memCache := &sync.Map{}
 	mc, ok := workflowMemoryCache.Load(key)
 	if !ok {

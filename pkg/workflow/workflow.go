@@ -136,10 +136,45 @@ func (w *workflow) ExecuteSteps(ctx monitorContext.Context, appRev *oamcore.Appl
 		return w.restartWorkflow(ctx, revAndSpecHash)
 	}
 
+	/*
+	// w.app.Status.Workflow 数据如下
+	{
+	  "appRevision": "vela-nginx-v1:49549c8a474f1411",
+	  "contextBackend": {
+	    "apiVersion": "v1",
+	    "kind": "ConfigMap",
+	    "name": "workflow-vela-nginx-context",
+	    "uid": "bc11c4f0-d611-4a8e-ac67-44782708fcda"
+	  },
+	  "finished": true,
+	  "message": "Succeeded",
+	  "mode": "DAG",
+	  "startTime": "2022-10-31T03:27:35Z",
+	  "steps": [
+	    {
+	      "firstExecuteTime": "2022-10-31T08:13:33Z",
+	      "id": "mkn82niz1s",
+	      "lastExecuteTime": "2022-10-31T08:13:33Z",
+	      "name": "vela-nginx",
+	      "phase": "succeeded",
+	      "type": "apply-component"
+	    }
+	  ],
+	  "suspend": false,
+	  "terminated": false
+	}
+	*/
 	wfStatus := w.app.Status.Workflow
 	cacheKey := fmt.Sprintf("%s-%s", w.app.Name, w.app.Namespace)
 
 	allTasksDone, allTasksSucceeded := w.allDone(taskRunners)
+	/*
+	wfStatus 有三个参数描述 workflow 的整体状态
+	分别是
+	finished：任务已完成
+	suspend：任务处于暂停状态
+	terminated：任务被终止
+	*/
 	if wfStatus.Finished {
 		StepStatusCache.Delete(cacheKey)
 		return common.WorkflowStateFinished, nil
@@ -156,6 +191,8 @@ func (w *workflow) ExecuteSteps(ctx monitorContext.Context, appRev *oamcore.Appl
 
 	if cacheValue, ok := StepStatusCache.Load(cacheKey); ok {
 		// handle cache resource
+		// 成功从缓存中根据cacheKey加载出workflow的step数量
+		// 从api storage中获取的step数量小于缓存中的step数量, 中间肯定有step被忽略了
 		if len(wfStatus.Steps) < cacheValue.(int) {
 			return common.WorkflowStateSkipping, nil
 		}
@@ -167,8 +204,10 @@ func (w *workflow) ExecuteSteps(ctx monitorContext.Context, appRev *oamcore.Appl
 		wfStatus.Message = string(common.WorkflowStateExecuting)
 		return common.WorkflowStateExecuting, err
 	}
+	// 构建出来的 workflow context 再回写到 workflow.wfCtx
 	w.wfCtx = wfCtx
 
+	// 根据workflow context、workflow、workflowstep status 构建workflow engine
 	e := newEngine(ctx, wfCtx, w, wfStatus)
 
 	err = e.Run(taskRunners, w.dagMode)
@@ -402,25 +441,38 @@ func (w *workflow) GetBackoffWaitTime() time.Duration {
 }
 
 func (w *workflow) allDone(taskRunners []wfTypes.TaskRunner) (bool, bool) {
+	/*
+	返回结果
+	allTasksDone:bool 描述所有task都已经完成
+	allTasksSucceeded:bool 描述所有task都已经成功执行
+	*/
 	// 遍历tasks和steps数组判断是否全部task runner都已经完成
 	success := true
 	status := w.app.Status.Workflow
 	// taskRunners t1    t2    t3    t4
 	// stepStatus  s1/t1 s2/t2 s3/t3 s4/t4
+	// 遍历所有的task runner
 	for _, t := range taskRunners {
 		done := false
+		// 根据name从status.Steps中过滤出对应的step status
 		for _, ss := range status.Steps {
 			if ss.Name == t.Name() {
+				// 根据phase和rease判断是否已经完成
 				done = wfTypes.IsStepFinish(ss.Phase, ss.Reason)
 				/*
 					感觉写多余了，单独看
 					done && (ss.Phase == common.WorkflowStepPhaseSucceeded || ss.Phase == common.WorkflowStepPhaseSkipped)
 					如果ss.Phase == common.WorkflowStepPhaseSucceeded 或者 common.WorkflowStepPhaseSkipped 那么done一定为true
 				*/
+				// succes: 所有任务均成功执行
+				// done: 当前任务执行完毕
+				// phase == common.WorkflowStepPhaseSucceeded || phase == common.WorkflowStepPhaseSkipped: 当前任务执行成功
 				success = success && done && (ss.Phase == common.WorkflowStepPhaseSucceeded || ss.Phase == common.WorkflowStepPhaseSkipped)
+				// 命中跳过
 				break
 			}
 		}
+		// 如果当前任务处于未完成状态，直接返回
 		if !done {
 			return false, false
 		}
@@ -437,33 +489,58 @@ func (w *workflow) makeContext(appName string) (wfCtx wfContext.Context, err err
 		}
 		return
 	}
-
+	// 构建一个新的 workflow context 对象
 	wfCtx, err = wfContext.NewContext(w.cli, w.app.Namespace, appName, w.app.GetUID())
 
 	if err != nil {
 		err = errors.WithMessage(err, "new context")
 		return
 	}
-
+	// w.application.ObjectMeta -> workflow context
 	if err = w.setMetadataToContext(wfCtx); err != nil {
 		return
 	}
+	// 1. save meta to store in memory
+	// 2. sync to configmap
 	if err = wfCtx.Commit(); err != nil {
 		return
 	}
+	// 返回workflow context 的 store(configmap) 的 owner references
 	wfStatus.ContextBackend = wfCtx.StoreRef()
 	return
 }
 
 func (w *workflow) setMetadataToContext(wfCtx wfContext.Context) error {
+	// 复制workflow上的 OjectMeta 到 workflow context 上
+	// 深拷贝application对象的ObjectMeta, 并清空application对象上的k8s自动生成的字段
 	copierMeta := w.app.ObjectMeta.DeepCopy()
 	copierMeta.ManagedFields = nil
 	copierMeta.Finalizers = nil
 	copierMeta.OwnerReferences = nil
+	/*
+	{
+	  "annotations": {
+	    "app.oam.dev/last-applied-configuration": "{\"kind\":\"Application\",\"apiVersion\":\"core.oam.dev/v1beta1\",\"metadata\":{\"name\":\"vela-nginx\",\"namespace\":\"default\",\"creationTimestamp\":null,\"labels\":{\"oam.dev/render-hash\":\"f53045f054e0e4d8\"}},\"spec\":{\"components\":[{\"name\":\"vela-nginx\",\"type\":\"webservice\",\"properties\":{\"image\":\"nginx:1.23.2-alpine\",\"ports\":[{\"expose\":true,\"port\":80}]},\"traits\":[{\"type\":\"scaler\",\"properties\":{\"replicas\":1}},{\"type\":\"gateway\",\"properties\":{\"http\":{\"/vela-nginx\":80}}}]}]},\"status\":{}}",
+	    "app.oam.dev/last-applied-time": "2022-10-31T11:27:07+08:00",
+	    "oam.dev/kubevela-version": "UNKNOWN"
+	  },
+	  "creationTimestamp": "2022-10-31T03:27:09Z",
+	  "generation": 1,
+	  "labels": {
+	    "oam.dev/render-hash": "f53045f054e0e4d8"
+	  },
+	  "name": "vela-nginx",
+	  "namespace": "default",
+	  "resourceVersion": "3987452",
+	  "selfLink": "/apis/core.oam.dev/v1beta1/namespaces/default/applications/vela-nginx",
+	  "uid": "a02799a9-4869-4d2e-9e78-5017fba47760"
+	}
+	*/
 	metadata, err := value.NewValue(string(util.MustJSONMarshal(copierMeta)), nil, "")
 	if err != nil {
 		return err
 	}
+	// wfTypes.ContextKeyMetadata => "metadata__"
 	return wfCtx.SetVar(metadata, wfTypes.ContextKeyMetadata)
 }
 
@@ -577,12 +654,14 @@ func (e *engine) runAsDAG(taskRunners []wfTypes.TaskRunner, pendingRunners bool)
 	for _, tRunner := range taskRunners {
 		finish := false
 		var stepID string
+		// 获取当前runner的状态和stepID
 		if status, ok := e.stepStatus[tRunner.Name()]; ok {
 			stepID = status.ID
 			finish = wfTypes.IsStepFinish(status.Phase, status.Reason)
 		}
 		if !finish {
 			done = false
+			// 检查当前step是否需要pending
 			if pending, status := tRunner.Pending(wfCtx, e.stepStatus); pending {
 				if pendingRunners {
 					wfCtx.IncreaseCountValueInMemory(wfTypes.ContextPrefixBackoffTimes, status.ID)
@@ -600,6 +679,7 @@ func (e *engine) runAsDAG(taskRunners []wfTypes.TaskRunner, pendingRunners bool)
 		}
 	}
 	// 如果有待执行任务这里的done一定是false
+	// 遍历过程中所有任务都是完成的才能保证done为true,则表示所有任务都已经完成
 	if done {
 		return nil
 	}
@@ -809,6 +889,7 @@ func (e *engine) updateStepStatus(status common.StepStatus) {
 	e.wfCtx.SetValueInMemory(now.Unix(), wfTypes.ContextKeyLastExecuteTime)
 	status.LastExecuteTime = now
 	index := -1
+	// 从所有的steps中过滤出 name=stepName 的step
 	for i, ss := range e.status.Steps {
 		if ss.Name == stepName {
 			index = i
@@ -824,7 +905,10 @@ func (e *engine) updateStepStatus(status common.StepStatus) {
 				}
 			} else {
 				// update the parent steps status
+				// 仅保留原始status中的FirstExecuteTime
+				// 其余使用重新生成的status
 				status.FirstExecuteTime = ss.FirstExecuteTime
+				// 回写到status.Steps[i]中
 				e.status.Steps[i].StepStatus = status
 				conditionUpdated = true
 				break
@@ -847,6 +931,7 @@ func (e *engine) updateStepStatus(status common.StepStatus) {
 			e.status.Steps = append(e.status.Steps, common.WorkflowStepStatus{StepStatus: status})
 		}
 	}
+	// 更新stepStatus
 	e.stepStatus[status.Name] = status
 }
 
@@ -908,6 +993,8 @@ func (e *engine) findDependPhase(taskRunners []wfTypes.TaskRunner, index int, da
 }
 
 func (e *engine) findDependsOnPhase(name string) common.WorkflowStepPhase {
+	// name 标记当前 task 名字
+	// e.stepDependsOn[name] 为当前task的依赖
 	for _, dependsOn := range e.stepDependsOn[name] {
 		if e.stepStatus[dependsOn].Phase != common.WorkflowStepPhaseSucceeded {
 			return e.stepStatus[dependsOn].Phase

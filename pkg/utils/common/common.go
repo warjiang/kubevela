@@ -215,6 +215,7 @@ func HTTPGetWithOption(ctx context.Context, url string, opts *HTTPOption) ([]byt
 
 // HTTPGetKubernetesObjects use HTTP requests to load resources from remote url
 func HTTPGetKubernetesObjects(ctx context.Context, url string) ([]*unstructured.Unstructured, error) {
+	// 从url中下载yaml内容，反序列化成unstructured.Unstructured数组
 	resp, err := HTTPGetResponse(ctx, url, nil)
 	if err != nil {
 		return nil, err

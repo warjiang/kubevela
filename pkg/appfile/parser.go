@@ -152,6 +152,7 @@ func (p *Parser) GenerateAppFileFromApp(ctx context.Context, app *v1beta1.Applic
 		if w == nil {
 			continue
 		}
+		// 遍历所有的wordload，将workload上的ComponentDefinition和TraitDefinition信息回写到appfile上的RelatedComponentDefinitions、RelatedTraitDefinitions
 		if w.FullTemplate.ComponentDefinition != nil {
 			cd := w.FullTemplate.ComponentDefinition.DeepCopy()
 			cd.Status = v1beta1.ComponentDefinitionStatus{}
@@ -377,31 +378,67 @@ func (p *Parser) parseReferredObjects(ctx context.Context, af *Appfile) error {
 		if comp.Type != v1alpha1.RefObjectsComponentType {
 			continue
 		}
+		// 遍历所有的type="ref-objects"的component
+
+		// 处理 objects 属性
+		/*
+		components:
+		- refobj1:
+		    type: "ref-objects"
+			properties:
+			  urls: ["https://hello.yaml"]
+		- refobj2:
+			type: "ref-objects"
+			properties:
+				objects:
+				- resource: "resource"
+		          group: "group"
+				  name: "name"
+		          namespace: "namespace"
+		          cluster: "cluster"
+		          labelSelector: "labelSelector"
+				- resource: "resource"
+		          group: "group"
+				  name: "name"
+			      namespace: "namespace"
+			      cluster: "cluster"
+			      labelSelector: "labelSelector"
+
+		*/
 		spec := &v1alpha1.RefObjectsComponentSpec{}
 		if err := utils.StrictUnmarshal(comp.Properties.Raw, spec); err != nil {
 			return errors.Wrapf(err, "invalid properties for ref-objects in component %s", comp.Name)
 		}
 		for _, selector := range spec.Objects {
+			// select & clean object by selector
 			objs, err := component.SelectRefObjectsForDispatch(ctx, p.client, af.app.GetNamespace(), comp.Name, selector)
 			if err != nil {
 				return err
 			}
+			// ref object 追加到 appfile.ReferredObjects 中
 			af.ReferredObjects = component.AppendUnstructuredObjects(af.ReferredObjects, objs...)
 		}
+
+
+		// 处理 url 属性
+		// 开启了DisableReferObjectsFromURL且spec中有url报错
 		if utilfeature.DefaultMutableFeatureGate.Enabled(features.DisableReferObjectsFromURL) && len(spec.URLs) > 0 {
 			return fmt.Errorf("referring objects from url is disabled")
 		}
+		// 遍历所有的url，
 		for _, url := range spec.URLs {
 			objs, err := utilscommon.HTTPGetKubernetesObjects(ctx, url)
 			if err != nil {
 				return fmt.Errorf("failed to load Kubernetes objects from url %s: %w", url, err)
 			}
+			// 对所有从url下载并解析出来的object增加"app.oam.dev/resource-url"=url的注解
 			for _, obj := range objs {
 				util.AddAnnotations(obj, map[string]string{oam.AnnotationResourceURL: url})
 			}
 			af.ReferredObjects = component.AppendUnstructuredObjects(af.ReferredObjects, objs...)
 		}
 	}
+	// 按照GVK|ObjectKey进行排序升序排序
 	sort.Slice(af.ReferredObjects, func(i, j int) bool {
 		a, b := af.ReferredObjects[i], af.ReferredObjects[j]
 		keyA := a.GroupVersionKind().String() + "|" + client.ObjectKeyFromObject(a).String()

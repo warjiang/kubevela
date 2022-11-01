@@ -55,9 +55,11 @@ var RefObjectsAvailableScope = RefObjectsAvailableScopeGlobal
 
 // GetLabelSelectorFromRefObjectSelector extract labelSelector from `labelSelector` first. If empty, extract from `selector`
 func GetLabelSelectorFromRefObjectSelector(selector v1alpha1.ObjectReferrer) map[string]string {
+	// 优先取selector下的labelSelector不为空直接返回
 	if selector.LabelSelector != nil {
 		return selector.LabelSelector
 	}
+	// 开启DeprecatedObjectLabelSelector情况下，返回selector下的DeprecatedLabelSelector(对应的json中应该是selector)
 	if utilfeature.DefaultMutableFeatureGate.Enabled(features.DeprecatedObjectLabelSelector) {
 		return selector.DeprecatedLabelSelector
 	}
@@ -67,6 +69,7 @@ func GetLabelSelectorFromRefObjectSelector(selector v1alpha1.ObjectReferrer) map
 // GetGroupVersionKindFromRefObjectSelector extract GroupVersionKind by Resource if provided, otherwise, extract from APIVersion and Kind directly
 func GetGroupVersionKindFromRefObjectSelector(mapper meta.RESTMapper, selector v1alpha1.ObjectReferrer) (schema.GroupVersionKind, error) {
 	if selector.Resource != "" {
+		// 根据 group、resource 发挥 gvks 列表
 		gvks, err := mapper.KindsFor(schema.GroupVersionResource{Group: selector.Group, Resource: selector.Resource})
 		if err != nil {
 			return schema.GroupVersionKind{}, err
@@ -76,6 +79,7 @@ func GetGroupVersionKindFromRefObjectSelector(mapper meta.RESTMapper, selector v
 		}
 		return gvks[0], nil
 	}
+	// 开启 LegacyObjectTypeIdentifier 情况下
 	if utilfeature.DefaultMutableFeatureGate.Enabled(features.LegacyObjectTypeIdentifier) {
 		if selector.APIVersion != "" && selector.Kind != "" {
 			gv, err := schema.ParseGroupVersion(selector.APIVersion)
@@ -93,6 +97,7 @@ func GetGroupVersionKindFromRefObjectSelector(mapper meta.RESTMapper, selector v
 func ValidateRefObjectSelector(selector v1alpha1.ObjectReferrer) error {
 	labelSelector := GetLabelSelectorFromRefObjectSelector(selector)
 	if labelSelector != nil && selector.Name != "" {
+		// selector.Name 和 labelSelector 不能同时生效
 		return errors.Errorf("invalid object selector for ref-objects, name and labelSelector cannot be both set")
 	}
 	return nil
@@ -100,6 +105,7 @@ func ValidateRefObjectSelector(selector v1alpha1.ObjectReferrer) error {
 
 // ClearRefObjectForDispatch reset the objects for dispatch
 func ClearRefObjectForDispatch(un *unstructured.Unstructured) {
+	// 清理k8s自动生成的字段，保留纯k8s对象
 	un.SetResourceVersion("")
 	un.SetGeneration(0)
 	un.SetOwnerReferences(nil)
@@ -119,28 +125,36 @@ func ClearRefObjectForDispatch(un *unstructured.Unstructured) {
 
 // SelectRefObjectsForDispatch select objects by selector from kubernetes
 func SelectRefObjectsForDispatch(ctx context.Context, cli client.Client, appNs string, compName string, selector v1alpha1.ObjectReferrer) (objs []*unstructured.Unstructured, err error) {
+	// 验证selector的合法性（TODO 合法之后完全可以把合法的lableSelector返回出来）
+	// 校验的时候 ValidateRefObjectSelector 内部会调用一次 GetLabelSelectorFromRefObjectSelector
+	// 校验合法后还会继续调用 GetLabelSelectorFromRefObjectSelector
 	if err = ValidateRefObjectSelector(selector); err != nil {
 		return nil, err
 	}
 	labelSelector := GetLabelSelectorFromRefObjectSelector(selector)
 	ns := appNs
-	if selector.Namespace != "" {
+	if selector.Namespace != "" { // selector中指定了namespace优先使用
 		if RefObjectsAvailableScope == RefObjectsAvailableScopeNamespace {
 			return nil, errors.Errorf("cannot refer to objects outside the application's namespace")
 		}
 		ns = selector.Namespace
 	}
 	if selector.Cluster != "" && selector.Cluster != multicluster.ClusterLocalName {
+		// multicluster.ClusterLocalName => local
+		// selector中标记的cluster不是local
 		if RefObjectsAvailableScope != RefObjectsAvailableScopeGlobal {
 			return nil, errors.Errorf("cannot refer to objects outside control plane")
 		}
+		// ctx 上设置 selector 的 Cluster
 		ctx = multicluster.ContextWithClusterName(ctx, selector.Cluster)
 	}
+	// gvr -> gvk
 	gvk, err := GetGroupVersionKindFromRefObjectSelector(cli.RESTMapper(), selector)
 	if err != nil {
 		return nil, err
 	}
 	if selector.Name == "" && labelSelector != nil {
+		// 走labelSelector的逻辑
 		uns := &unstructured.UnstructuredList{}
 		uns.SetGroupVersionKind(gvk)
 		if err = cli.List(ctx, uns, client.InNamespace(ns), client.MatchingLabels(labelSelector)); err != nil {
@@ -150,6 +164,7 @@ func SelectRefObjectsForDispatch(ctx context.Context, cli client.Client, appNs s
 			objs = append(objs, _un.DeepCopy())
 		}
 	} else {
+		// 走selector的逻辑
 		un := &unstructured.Unstructured{}
 		un.SetGroupVersionKind(gvk)
 		un.SetName(selector.Name)
@@ -162,6 +177,7 @@ func SelectRefObjectsForDispatch(ctx context.Context, cli client.Client, appNs s
 		}
 		objs = append(objs, un)
 	}
+	// 无论那种匹配逻辑都会把匹配的对象保存在objs中
 	for _, obj := range objs {
 		ClearRefObjectForDispatch(obj)
 	}

@@ -206,12 +206,14 @@ func (h *AppHandler) PrepareCurrentAppRevision(ctx context.Context, af *appfile.
 	}
 	// 首次创建的时候必然不存在ApplicationRevision
 	// 生成ApplicationRevision, 赋值给h并退出
+	// 格努appfile构造一个内存中的ApplicationRevision, 并让apphandler的currentAppRev和currentRevHash指向它
 	appRev, appRevisionHash, err := h.gatherRevisionSpec(af)
 	if err != nil {
 		return err
 	}
 	h.currentAppRev = appRev
 	h.currentRevHash = appRevisionHash
+	// 根据h.app.spec.latestRevisionName获取最新的ApplicationRevision, 获取成功后赋值给h.latestAppRev
 	if err := h.getLatestAppRevision(ctx); err != nil {
 		return err
 	}
@@ -222,6 +224,8 @@ func (h *AppHandler) PrepareCurrentAppRevision(ctx context.Context, af *appfile.
 		return err
 	}
 	if h.isNewRevision && needGenerateRevision {
+		// isNewRevision=true: lastestRevision落后于currentRevision
+		// needGenerateRevision=true: currentRevision需要重新生成
 		// 需要重新生成applicationRevision
 		// revisionName = applicationName + "-" + v1/v2/v3
 		h.currentAppRev.Name, _ = utils.GetAppNextRevision(h.app)
@@ -454,6 +458,13 @@ func ComputeAppRevisionHash(appRevision *v1beta1.ApplicationRevision) (string, e
 
 // currentAppRevIsNew check application revision already exist or not
 func (h *AppHandler) currentAppRevIsNew(ctx context.Context) (bool, bool, error) {
+	/*
+	// 返回值
+	isNewRevision bool h.currentAppRev是否比h.lastestAppRev更新些
+	needGenerateRevision bool 是否需要生成新的application revision name
+	error 执行过程中的异常信息
+	*/
+
 	// the last revision doesn't exist.
 	if h.app.Status.LatestRevision == nil || DisableAllApplicationRevision {
 		return true, true, nil
@@ -489,6 +500,8 @@ func (h *AppHandler) currentAppRevIsNew(ctx context.Context) (bool, bool, error)
 
 	for _, _rev := range revs {
 		rev := _rev.DeepCopy()
+		// 反查application关联的application revision, 过滤去 "app.oam.dev/app-revision-hash"=h.currentRevHash的application revision
+		// 重新将application revision赋值给h.currentAppRev
 		if rev.GetLabels()[oam.LabelAppRevisionHash] == h.currentRevHash &&
 			DeepEqualRevision(rev, h.currentAppRev) &&
 			oam.GetPublishVersion(rev) == oam.GetPublishVersion(h.app) {
@@ -1084,6 +1097,9 @@ func GetAppRevisions(ctx context.Context, cli client.Client, appName string, app
 		client.InNamespace(appNs),
 		client.MatchingLabels{oam.LabelAppName: appName},
 	}
+	// application反查所有的application revision列表
+	// "app.oam.dev/name"={appName} -n {appNs}
+	// kubectl get apprev -l "app.oam.dev/name=vela-nginx" -n xxx
 	appRevisionList := new(v1beta1.ApplicationRevisionList)
 	if err := cli.List(ctx, appRevisionList, listOpts...); err != nil {
 		return nil, err

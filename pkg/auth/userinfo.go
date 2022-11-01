@@ -44,6 +44,7 @@ func ContextWithUserInfo(ctx context.Context, app *v1beta1.Application) context.
 	if app == nil {
 		return ctx
 	}
+	// ctx 写入 userKey
 	return request.WithUser(ctx, GetUserInfoInAnnotation(&app.ObjectMeta))
 }
 
@@ -71,20 +72,27 @@ func SetUserInfoInAnnotation(obj *metav1.ObjectMeta, userInfo authv1.UserInfo) {
 // GetUserInfoInAnnotation extract user info from annotations
 // support compatibility for serviceAccount when name is empty
 func GetUserInfoInAnnotation(obj *metav1.ObjectMeta) user.Info {
+	// 从meta中提取
+	// name => "app.oam.dev/username"
+	// serviceAccountName => "app.oam.dev/service-account-name"
 	annotations := obj.GetAnnotations()
 	if annotations == nil {
 		annotations = map[string]string{}
 	}
 
+	// name为空, serviceAccountName不为空的情况下, name="system:serviceaccount:{namespace}:{serviceAccountName}"
 	name := annotations[oam.AnnotationApplicationUsername]
 	if serviceAccountName := annotations[oam.AnnotationApplicationServiceAccountName]; serviceAccountName != "" && name == "" {
 		name = fmt.Sprintf("system:serviceaccount:%s:%s", obj.GetNamespace(), serviceAccountName)
 	}
 
+	// 到这里还没拿到name
 	if name == "" && utilfeature.DefaultMutableFeatureGate.Enabled(features.AuthenticateApplication) {
+		// 如果启用了 "AuthenticateApplication" feature的话, 默认用户是 AuthenticationDefaultUser("system:anonymous")
 		name = AuthenticationDefaultUser
 	}
 
+	// Groups => "app.oam.dev/group"按照','分割过滤掉空串
 	return &user.DefaultInfo{
 		Name: name,
 		Groups: slices.Filter(

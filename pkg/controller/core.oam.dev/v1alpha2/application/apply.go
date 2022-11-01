@@ -135,6 +135,8 @@ func (h *AppHandler) Delete(ctx context.Context, cluster string, owner common.Re
 func (h *AppHandler) addAppliedResource(previous bool, refs ...common.ClusterObjectReference) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
+	// 正常逻辑为从appliedResources中查找对应的ref不存在则追加写入
+	// 开启previous时会增加deletedResources校验，如果ref已经在deletedResources出现则从deletedResources中移除
 	for _, ref := range refs {
 		if previous {
 			// previous=true的情况下, 如果在h.deletedResources中找到对应的ref资源则删除

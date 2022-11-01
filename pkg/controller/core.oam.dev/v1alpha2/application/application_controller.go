@@ -188,6 +188,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 	r.Recorder.Event(app, event.Normal(velatypes.ReasonRevisoned, velatypes.MessageRevisioned))
 
 	// 更新Application的Status.LatestRevision
+	// 保持application的status.LatestRevision能时刻最终最新计算出来的值
 	if err := handler.UpdateAppLatestRevisionStatus(logCtx); err != nil {
 		logCtx.Error(err, "Failed to update application status")
 		return r.endWithNegativeCondition(logCtx, app, condition.ReconcileError(err), common.ApplicationRendering)

@@ -63,7 +63,7 @@ func (td *taskDiscover) GetTaskGenerator(ctx context.Context, name string) (type
 	}
 	// name对应的内置genTask函数不存在尝试从远程加载
 	if td.remoteTaskDiscover != nil {
-		var err error// pkg/workflow/tasks/template/static 或通过 kubectl get workflowstepdefinitions -n vela-system 架子啊
+		var err error// pkg/workflow/tasks/template/static 或通过 kubectl get workflowstepdefinitions -n vela-system 获取
 		tg, err = td.remoteTaskDiscover.GetTaskGenerator(ctx, name)
 		if err != nil {
 			return nil, err

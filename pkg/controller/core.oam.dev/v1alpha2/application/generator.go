@@ -150,7 +150,8 @@ func generateStep(ctx context.Context,
 			options.ExecuteMode = app.Spec.Workflow.Mode.SubSteps
 		}
 	}
-
+	// 假设 generatorName="apply-component"
+	// 通过上面的switch之后 generatorName="builtin-apply-component"
 	genTask, err := taskDiscover.GetTaskGenerator(ctx, generatorName)
 	if err != nil {
 		return nil, err

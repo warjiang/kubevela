@@ -571,6 +571,7 @@ func NewTaskLoader(lt LoadTaskTemplate, pkgDiscover *packages.PackageDiscover, h
 
 // CheckPending checks whether to pending task run
 func CheckPending(ctx wfContext.Context, step v1beta1.WorkflowStep, id string, stepStatus map[string]common.StepStatus) (bool, common.StepStatus) {
+	// 检查当前task是否需要pending
 	pStatus := common.StepStatus{
 		Phase: common.WorkflowStepPhasePending,
 		Type:  step.Type,
@@ -580,17 +581,22 @@ func CheckPending(ctx wfContext.Context, step v1beta1.WorkflowStep, id string, s
 	// 检查所有的依赖安装情况
 	for _, depend := range step.DependsOn {
 		pStatus.Message = fmt.Sprintf("Pending on DependsOn: %s", depend)
+		// 获取依赖的step的执行状态
 		if status, ok := stepStatus[depend]; ok {
+			// 取到依赖的step的执行状态，如果处于未完成状态，则当前step需要pending
 			if !wfTypes.IsStepFinish(status.Phase, status.Reason) {
 				return true, pStatus
 			}
 		} else {
+			// 取不到状态，保守的认为当前任务需要pending
 			return true, pStatus
 		}
 	}
 	// todo 检查inputs
+	// 检查所有的inputs的情况(这种可能是一个manual approve的情况)
 	for _, input := range step.Inputs {
 		pStatus.Message = fmt.Sprintf("Pending on Input: %s", input.From)
+		// 从 cue.value 上取值报错，说明当前step需要pending
 		if _, err := ctx.GetVar(strings.Split(input.From, ".")...); err != nil {
 			return true, pStatus
 		}
