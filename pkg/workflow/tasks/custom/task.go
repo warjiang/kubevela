@@ -128,17 +128,20 @@ func (t *TaskLoader) makeTaskGenerator(templ string) (wfTypes.TaskGenerator, err
 			return CheckPending(ctx, wfStep, exec.wfStatus.ID, stepStatus)
 		}
 		tRunner.run = func(ctx wfContext.Context, options *wfTypes.TaskRunOptions) (stepStatus common.StepStatus, operations *wfTypes.Operation, rErr error) {
+			// unify 一个 GetTracer 函数
 			if options.GetTracer == nil {
 				options.GetTracer = func(id string, step v1beta1.WorkflowStep) monitorContext.Context {
 					return monitorContext.NewTraceContext(context.Background(), "")
 				}
 			}
+			// 生成tracer ctx对象，用于打点啥的
 			tracer := options.GetTracer(exec.wfStatus.ID, wfStep).AddTag("step_name", wfStep.Name, "step_type", wfStep.Type)
 			tracer.V(t.logLevel)
 			defer func() {
 				tracer.Commit(string(exec.status().Phase))
 			}()
 
+			// pkg/workflow/tasks/custom/task.go:556
 			if t.runOptionsProcess != nil {
 				t.runOptionsProcess(options)
 			}
@@ -249,12 +252,13 @@ func ValidateIfValue(ctx wfContext.Context, step v1beta1.WorkflowStep, stepStatu
 		pd = options.PackageDiscover
 		pCtx = options.ProcessContext
 	}
-
+	// 构造template的cue表达式
 	template := fmt.Sprintf("if: %s", step.If)
 	value, err := buildValueForStatus(ctx, step, pd, template, stepStatus, pCtx)
 	if err != nil {
 		return false, errors.WithMessage(err, "invalid if value")
 	}
+	// 上下文中解析处if字段的值
 	check, err := value.GetBool("if")
 	if err != nil {
 		return false, err
@@ -263,6 +267,7 @@ func ValidateIfValue(ctx wfContext.Context, step v1beta1.WorkflowStep, stepStatu
 }
 
 func buildValueForStatus(ctx wfContext.Context, step v1beta1.WorkflowStep, pd *packages.PackageDiscover, template string, stepStatus map[string]common.StepStatus, pCtx process.Context) (*value.Value, error) {
+	// 构造ctx表达式
 	contextTempl := getContextTemplate(ctx, "", pCtx)
 	inputsTempl := getInputsTemplate(ctx, step)
 	statusTemplate := "\n"
@@ -286,6 +291,28 @@ func buildValueForStatus(ctx wfContext.Context, step v1beta1.WorkflowStep, pd *p
 			Terminate:          ss.Reason == wfTypes.StatusReasonTerminate,
 		}
 		statusMap[name] = abbrStatus
+		/*
+		statusMap=>
+			step1 => {
+				StepStatus: {
+					id: "id",
+					name: "name",
+					type: "type",
+					phase: "phase",
+					message: "message",
+					reason: "reason",
+					firstExecuteTime: metav1.Time,
+					lastExecuteTime: metav1.Time,
+				},
+				Failed: false,
+				Succeeded: true,
+				Skipped: false,
+				Timeout: false,
+				FailedAfterRetries: true
+				Terminate: false,
+			}
+			step2 => {}
+		*/
 	}
 	status, err := json.Marshal(statusMap)
 	if err != nil {
@@ -294,6 +321,33 @@ func buildValueForStatus(ctx wfContext.Context, step v1beta1.WorkflowStep, pd *p
 	statusTemplate += fmt.Sprintf("status: %s\n", status)
 	statusTemplate += contextTempl
 	statusTemplate += "\n" + inputsTempl
+	/*
+	status:
+		step1:
+			id: "id",
+			name: "name",
+			type: "type",
+			phase: "phase",
+			message: "message",
+			reason: "reason",
+			firstExecuteTime: metav1.Time,
+			lastExecuteTime: metav1.Time,
+			Failed: false,
+			Succeeded: true,
+			Skipped: false,
+			Timeout: false,
+			FailedAfterRetries: true
+			Terminate: false,
+		step2:
+	// contextTempl
+	context:
+		...
+	context:
+		stepSessionID: "123"
+	// inputsTempl
+	inputs: xx
+	inputs: yy
+	*/
 	return value.NewValue(template+"\n"+statusTemplate, pd, "")
 }
 
@@ -310,12 +364,15 @@ func MakeValueForContext(ctx wfContext.Context, pd *packages.PackageDiscover, id
 
 func getContextTemplate(ctx wfContext.Context, id string, pCtx process.Context) string {
 	var contextTempl string
+	// ctx 上解析出 "metadata__"
 	meta, _ := ctx.GetVar(wfTypes.ContextKeyMetadata)
 	if meta != nil {
+		// value.Value 转 string
 		ms, err := meta.String()
 		if err != nil {
 			return ""
 		}
+		// 构造表达式
 		contextTempl = fmt.Sprintf("\ncontext: {%s}\ncontext: stepSessionID: \"%s\"", ms, id)
 	}
 	if pCtx == nil {
@@ -331,6 +388,11 @@ func getContextTemplate(ctx wfContext.Context, id string, pCtx process.Context) 
 
 func getInputsTemplate(ctx wfContext.Context, step v1beta1.WorkflowStep) string {
 	var inputsTempl string
+	/*
+	遍历所有的inputs表达式，构造出如下表达式
+	inputs: xx
+	inputs: yy
+	*/
 	for _, input := range step.Inputs {
 		inputValue, err := ctx.GetVar(strings.Split(input.From, ".")...)
 		if err != nil {
@@ -393,15 +455,17 @@ func (exec *executor) Fail(message string) {
 }
 
 func (exec *executor) Skip(message string) {
+	// 给executor设置允许跳过
 	exec.skip = true
-	exec.wfStatus.Phase = common.WorkflowStepPhaseSkipped
-	exec.wfStatus.Reason = wfTypes.StatusReasonSkip
+	exec.wfStatus.Phase = common.WorkflowStepPhaseSkipped // workflow status 最终过一定也是skipped
+	exec.wfStatus.Reason = wfTypes.StatusReasonSkip // reason同理
 	exec.wfStatus.Message = message
 }
 
 func (exec *executor) timeout(message string) {
+	// 给executor设置超时后的状态（悲观设置），默认认为executor一定会执行失败
 	exec.terminated = true
-	exec.wfStatus.Phase = common.WorkflowStepPhaseFailed
+	exec.wfStatus.Phase = common.WorkflowStepPhaseFailed // 配套失败时的phase和reason、message
 	exec.wfStatus.Reason = wfTypes.StatusReasonTimeout
 	exec.wfStatus.Message = message
 }
@@ -557,6 +621,7 @@ func NewTaskLoader(lt LoadTaskTemplate, pkgDiscover *packages.PackageDiscover, h
 		pd:           pkgDiscover,
 		handlers:     handlers,
 		runOptionsProcess: func(options *wfTypes.TaskRunOptions) {
+			// 预处理一次TaskRunOptions
 			if len(options.PreStartHooks) == 0 {
 				options.PreStartHooks = append(options.PreStartHooks, hooks.Input)
 			}

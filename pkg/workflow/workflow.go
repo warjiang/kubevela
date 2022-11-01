@@ -732,6 +732,7 @@ func (e *engine) checkWorkflowStatusMessage(wfStatus *common.WorkflowStatus) {
 
 func (e *engine) steps(taskRunners []wfTypes.TaskRunner, dag bool) error {
 	wfCtx := e.wfCtx
+	// 上面调用过来的时候传入的参数dag=true
 	for index, runner := range taskRunners {
 		if status, ok := e.stepStatus[runner.Name()]; ok {
 			if wfTypes.IsStepFinish(status.Phase, status.Reason) {
@@ -746,6 +747,7 @@ func (e *engine) steps(taskRunners []wfTypes.TaskRunner, dag bool) error {
 			}
 			return nil
 		}
+		// 找到第一个非successed(phase!=successed && phase!=skipped)的任务, 将其状态作为返回值
 		options := e.generateRunOptions(e.findDependPhase(taskRunners, index, dag))
 
 		status, operation, err := runner.Run(wfCtx, options)
@@ -806,6 +808,7 @@ func (e *engine) generateRunOptions(dependsOnPhase common.WorkflowStepPhase) *wf
 				case "always":
 					return &wfTypes.PreCheckResult{Skip: false}, nil
 				case "":
+					// 如果依赖的task都是unsuccesed, skip=true, 否则为false
 					return &wfTypes.PreCheckResult{Skip: isUnsuccessfulStep(dependsOnPhase)}, nil
 				default:
 					ifValue, err := custom.ValidateIfValue(e.wfCtx, step, e.stepStatus, options)
@@ -837,7 +840,7 @@ func (e *engine) generateRunOptions(dependsOnPhase common.WorkflowStepPhase) *wf
 				return &wfTypes.PreCheckResult{Timeout: false}, nil
 			},
 		},
-		PreStartHooks: []wfTypes.TaskPreStartHook{hooks.Input},
+		PreStartHooks: []wfTypes.TaskPreStartHook{hooks.Input}, // hooks.Input 就是为了调整 paramsValue
 		PostStopHooks: []wfTypes.TaskPostStopHook{hooks.Output},
 	}
 	if e.debug {
@@ -996,6 +999,9 @@ func (e *engine) findDependsOnPhase(name string) common.WorkflowStepPhase {
 	// name 标记当前 task 名字
 	// e.stepDependsOn[name] 为当前task的依赖
 	for _, dependsOn := range e.stepDependsOn[name] {
+		// 找到第一个状态不为 "succeeded" 的依赖作为返回值
+		// 这里的判断条件是 phase != "succeeded"
+		// 下面 isUnsuccessfulStep 的判断条件为 phase != "succeeded" || phase != "skipped"
 		if e.stepStatus[dependsOn].Phase != common.WorkflowStepPhaseSucceeded {
 			return e.stepStatus[dependsOn].Phase
 		}
