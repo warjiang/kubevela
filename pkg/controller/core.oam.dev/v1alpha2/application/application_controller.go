@@ -422,16 +422,23 @@ func (r *Reconciler) handleFinalizers(ctx monitorContext.Context, app *v1beta1.A
 }
 
 func (r *Reconciler) endWithNegativeCondition(ctx context.Context, app *v1beta1.Application, condition condition.Condition, phase common.ApplicationPhase) (ctrl.Result, error) {
+	// 1. 把condition应用到application上，即更新application.status.conditions的集合
 	app.SetConditions(condition)
+	// 2. 更新application的phase(1、2对applicatino的操作都会反馈到application/{application name}资源上)
 	if err := r.patchStatus(ctx, app, phase); err != nil {
 		return r.result(errors.WithMessage(err, "cannot update application status")).ret()
 	}
+	// 根据传入的condition、phase构造异常信息返回出去
 	return r.result(fmt.Errorf("object level reconcile error, type: %q, msg: %q", string(condition.Type), condition.Message)).ret()
 }
 
+// patchStatus patch application.status.status(struct中对应Phase字段)
 func (r *Reconciler) patchStatus(ctx context.Context, app *v1beta1.Application, phase common.ApplicationPhase) error {
+	// 1. 更新application.status.phase
 	app.Status.Phase = phase
+	// 2. 同步observedGeneration
 	updateObservedGeneration(app)
+	// 3. 更新资源，采用client.Merge选项
 	if err := r.Status().Patch(ctx, app, client.Merge); err != nil {
 		// set to -1 to re-run workflow if status is failed to patch
 		workflow.StepStatusCache.Store(fmt.Sprintf("%s-%s", app.Name, app.Namespace), -1)
@@ -440,10 +447,13 @@ func (r *Reconciler) patchStatus(ctx context.Context, app *v1beta1.Application, 
 	return nil
 }
 
+// updateStatus update application.status.status(struct中对应Phase字段)
 func (r *Reconciler) updateStatus(ctx context.Context, app *v1beta1.Application, phase common.ApplicationPhase) error {
+	// 1.更新application.status.phase为传入的phase
 	app.Status.Phase = phase
+	// 2. 同步observedGeneration为application当期generation
 	updateObservedGeneration(app)
-
+	// 3. 更新application
 	if !r.disableStatusUpdate {
 		return r.Status().Update(ctx, app)
 	}
@@ -459,16 +469,21 @@ func (r *Reconciler) updateStatus(ctx context.Context, app *v1beta1.Application,
 	return nil
 }
 
+// doWorkflowFinish workflow完成后处理动作
 func (r *Reconciler) doWorkflowFinish(app *v1beta1.Application, wf workflow.Workflow, state common.WorkflowState) error {
+	// 标记application.status.workflow.finished为true
 	app.Status.Workflow.Finished = true
+	// 通过recorder记录workflow的完成的事件
 	if err := wf.Trace(); err != nil {
 		return errors.WithMessage(err, "record workflow state")
 	}
+	// 上报promethus指标
 	t := time.Since(app.Status.Workflow.StartTime.Time).Seconds()
 	metrics.WorkflowFinishedTimeHistogram.WithLabelValues(string(state)).Observe(t)
 	return nil
 }
 
+// hasHealthCheckPolicy 遍历appfile中所有workload，检测是否有workload设置了healthcheck的policy
 func hasHealthCheckPolicy(policies []*appfile.Workload) bool {
 	for _, p := range policies {
 		if p.FullTemplate != nil && p.FullTemplate.PolicyDefinition != nil &&
@@ -581,6 +596,7 @@ func Setup(mgr ctrl.Manager, args core.Args) error {
 	return reconciler.SetupWithManager(mgr)
 }
 
+// updateObservedGeneration 更新application的observedGeneration到最新的generation
 func updateObservedGeneration(app *v1beta1.Application) {
 	// 保证 application.Status.ObservedGeneration 与 application.Generation 一致
 	if app.Status.ObservedGeneration != app.Generation {
@@ -628,17 +644,19 @@ func timeReconcile(app *v1beta1.Application) func() {
 	}
 }
 
+// parseOptions 命令行中解析出来的参数转换成 reconciler 的 options
 func parseOptions(args core.Args) options {
 	// unify 从flags解析出来的启动参数
 	return options{
-		disableStatusUpdate:  args.EnableCompatibility,
+		disableStatusUpdate:  args.EnableCompatibility, // enable-asi-compatibility  开启asi兼容模式下，不更新status, 默认为false
 		appRevisionLimit:     args.AppRevisionLimit,
 		concurrentReconciles: args.ConcurrentReconciles,
-		ignoreAppNoCtrlReq:   args.IgnoreAppWithoutControllerRequirement,
+		ignoreAppNoCtrlReq:   args.IgnoreAppWithoutControllerRequirement, // 默认为false
 		controllerVersion:    version.VelaVersion,
 	}
 }
 
+// matchControllerRequirement 校验集群中的controller版本是否满足application的要求
 func (r *Reconciler) matchControllerRequirement(app *v1beta1.Application) bool {
 	if app.Annotations != nil {
 		// annotaion存在的情况下, 获取annotation["app.oam.dev/controller-version-require"]字段
@@ -650,6 +668,8 @@ func (r *Reconciler) matchControllerRequirement(app *v1beta1.Application) bool {
 	// 非正常路径
 	// 如果开启了忽略非正常路径的执行过程则直接返回false,因为不match后续流程都不会走下去
 	// 否则会返回true,然后后续的流程继续兜底
+	// r.ignoreAppNoCtrlReq -> args.IgnoreAppWithoutControllerRequirement -> 启动参数中获取默认为false
+	// 表示 [忽略不包含controller requirement的注解的 application 对象的检查]
 	if r.ignoreAppNoCtrlReq {
 		return false
 	}

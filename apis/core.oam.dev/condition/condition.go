@@ -137,6 +137,7 @@ func (s *ConditionedStatus) GetCondition(ct ConditionType) Condition {
 // SetConditions sets the supplied conditions, replacing any existing conditions
 // of the same type. This is a no-op if all supplied conditions are identical,
 // ignoring the last transition time, to those already set.
+// 应用一组conditions, 内部会遍历当前已经存在的condition, 如果相同则重新赋值，不相同则追加写入
 func (s *ConditionedStatus) SetConditions(c ...Condition) {
 	// 输入的condtion追加写入到s.Conditions中，如果已经存在，则(去重)跳过
 	for _, new := range c {
