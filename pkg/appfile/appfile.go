@@ -597,7 +597,7 @@ func evalWorkloadWithContext(pCtx process.Context, wl *Workload, ns, appName, co
 		return nil, err
 	}
 	compManifest.StandardWorkload = workload
-
+	// pCtx.Output() 返回的结果分别是 output 和 outputs
 	_, assists := pCtx.Output() // 处理所有的outputs产物
 	compManifest.Traits = make([]*unstructured.Unstructured, len(assists))
 	commonLabels := definition.GetCommonLabels(pCtx.BaseContextLabels())

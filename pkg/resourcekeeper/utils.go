@@ -24,6 +24,8 @@ import (
 
 // ClearNamespaceForClusterScopedResources clear namespace for cluster scoped resources
 func (h *resourceKeeper) ClearNamespaceForClusterScopedResources(manifests []*unstructured.Unstructured) {
+	// 集群级别资源需要移除 namespace, 即设置namespace为空
+	// 遍历所有的资源，对于cluster级别的资源移除namespace
 	for _, manifest := range manifests {
 		if ok, err := utils.IsClusterScope(manifest.GroupVersionKind(), h.Client.RESTMapper()); err == nil && ok {
 			manifest.SetNamespace("")
@@ -32,8 +34,10 @@ func (h *resourceKeeper) ClearNamespaceForClusterScopedResources(manifests []*un
 }
 
 func (h *resourceKeeper) isShared(manifest *unstructured.Unstructured) bool {
+	// sharedResourcePolicy 为空情况下跳过检查
 	if h.sharedResourcePolicy == nil {
 		return false
 	}
+	//
 	return h.sharedResourcePolicy.FindStrategy(manifest)
 }

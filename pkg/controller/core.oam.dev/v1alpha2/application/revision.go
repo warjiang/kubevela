@@ -960,6 +960,8 @@ func gatherUsingAppRevision(h *AppHandler) map[string]bool {
 }
 
 func replaceComponentRevisionContext(u *unstructured.Unstructured, compRevName string) error {
+	// 替换 KUBEVELA_COMPONENT_REVISION_PLACEHOLDER
+	// 这个方法有些暴力啊，先把对象转换成成json字符串，执行字符串的全局替换，替换完毕之后再重新将对象反序列化出来
 	str := string(util.JSONMarshal(u))
 	if strings.Contains(str, model.ComponentRevisionPlaceHolder) {
 		newStr := strings.ReplaceAll(str, model.ComponentRevisionPlaceHolder, compRevName)

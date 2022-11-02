@@ -178,10 +178,13 @@ func (t *TaskLoader) makeTaskGenerator(templ string) (wfTypes.TaskGenerator, err
 					exec.Skip(fmt.Sprintf("pre check error: %s", err.Error()))
 					return exec.status(), exec.operation(), nil
 				}
+				// 判断返回结果并设置对应的executor的状态
+				// skip =>
 				if result.Skip {
 					exec.Skip("")
 					return exec.status(), exec.operation(), nil
 				}
+				// timeout =>
 				if result.Timeout {
 					exec.timeout("")
 				}
@@ -514,6 +517,7 @@ func (exec *executor) Handle(ctx wfContext.Context, provider string, do string, 
 		exec.printStep("stepStart", provider, do, v)
 		defer exec.printStep("stepEnd", provider, do, v)
 	}
+	// 根据 provider 和 对应的action 获取对应的handler
 	h, exist := exec.handlers.GetHandler(provider, do)
 	if !exist {
 		return errors.Errorf("handler not found")
@@ -597,6 +601,7 @@ func OpTpy(v *value.Value) string {
 }
 
 func opProvider(v *value.Value) string {
+	// unify provider name, 内置action不需要标记 #provider
 	provider := getLabel(v, "#provider")
 	if provider == "" {
 		provider = "builtin"

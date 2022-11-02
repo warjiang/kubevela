@@ -98,7 +98,14 @@ func (val *Value) DumpSyntax() error {
 	fmt.Println(string(b))
 	return nil
 }
-
+func DumpNode(node ast.Node, extraMsg string) {
+	b, err := format.Node(node)
+	if err == nil {
+		fmt.Println(extraMsg)
+		fmt.Println(string(b))
+		fmt.Println(extraMsg)
+	}
+}
 // NewValueWithMainAndFiles new a value from main and appendix files
 func NewValueWithMainAndFiles(main string, slaveFiles []string, pd *packages.PackageDiscover, tagTempl string, opts ...func(*ast.File) error) (*Value, error) {
 	builder := &build.Instance{}
@@ -114,10 +121,12 @@ func NewValueWithMainAndFiles(main string, slaveFiles []string, pd *packages.Pac
 			return nil, errors.Wrap(err, "parse main file with added package main header")
 		}
 	}
+	DumpNode(mainFile, "=====original file======")
 	for _, opt := range opts {
 		if err := opt(mainFile); err != nil {
 			return nil, errors.Wrap(err, "run option func for main file")
 		}
+		DumpNode(mainFile, "=====round[x]======")
 	}
 	if err := builder.AddSyntax(mainFile); err != nil {
 		return nil, errors.Wrap(err, "add main file to CUE builder")
@@ -151,10 +160,14 @@ func NewValue(s string, pd *packages.PackageDiscover, tagTempl string, opts ...f
 	if err != nil {
 		return nil, err
 	}
+	DumpNode(file, "=========origin file=========")
+	// string -> ast.File
+	// 遍历所有的options，执行opt定义的预处理操作
 	for _, opt := range opts {
 		if err := opt(file); err != nil {
 			return nil, err
 		}
+		DumpNode(file, "=========round[x] file=========")
 	}
 	if err := builder.AddSyntax(file); err != nil {
 		return nil, err
@@ -491,9 +504,13 @@ func (val *Value) StepByFields(handle func(name string, in *Value) (bool, error)
 			return errors.WithMessagef(err, "step %s", field.Name)
 		}
 		if !isDef(field.Name) {
+			pre, _ := val.v.MarshalJSON()
+			fmt.Println("pre====", string(pre))
 			if err := val.FillObject(field.Value, field.Name); err != nil {
 				return err
 			}
+			after, _ := val.v.MarshalJSON()
+			fmt.Println("after====", string(after))
 		}
 		if stop {
 			return nil

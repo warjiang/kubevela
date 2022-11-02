@@ -194,6 +194,7 @@ func EscapeResourceNameToLabelValue(resourceName string) string {
 
 // IsClusterScope check if the gvk is cluster scoped
 func IsClusterScope(gvk schema.GroupVersionKind, mapper meta.RESTMapper) (bool, error) {
+	// 检查gvk资源是否是集群级别的资源
 	mappings, err := mapper.RESTMappings(gvk.GroupKind(), gvk.Version)
 	isClusterScope := len(mappings) > 0 && mappings[0].Scope.Name() == meta.RESTScopeNameRoot
 	return isClusterScope, err

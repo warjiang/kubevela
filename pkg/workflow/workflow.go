@@ -53,6 +53,9 @@ var (
 	// DisableRecorder optimize workflow by disable recorder
 	DisableRecorder = false
 	// StepStatusCache cache the step status
+	// StepStatusCache 存储了每个workflow status下的任务总数
+	// key   = {applicationName}-{applicationNamespace}
+	// value = len(wfStatus.Steps)
 	StepStatusCache sync.Map
 )
 
@@ -132,12 +135,36 @@ func (w *workflow) ExecuteSteps(ctx monitorContext.Context, appRev *oamcore.Appl
 		return common.WorkflowStateFinished, nil
 	}
 
-	if needRestart(w.app, appRev.Name) { // 第一次走这里
+	if needRestart(w.app, appRev.Name) { // 第一次走这里, 强行写入 application revision
 		return w.restartWorkflow(ctx, revAndSpecHash)
 	}
 
 	/*
-	// w.app.Status.Workflow 数据如下
+	// w.app.Status.Workflow
+	// 对应的struct定义如下
+	type WorkflowStatus struct {
+	    AppRevision    string                  `json:"appRevision,omitempty"`
+	    Mode           WorkflowMode            `json:"mode"`
+	    Message        string                  `json:"message,omitempty"`
+	    SuspendState   string                  `json:"suspendState,omitempty"`
+	    Suspend        bool                    `json:"suspend"`
+	    Terminated     bool                    `json:"terminated"`
+	    Finished       bool                    `json:"finished"`
+	    ContextBackend *v1.ObjectReference 	   `json:"contextBackend,omitempty"`
+	    Steps          []WorkflowStepStatus    `json:"steps,omitempty"`
+	    StartTime      v1.Time                 `json:"startTime,omitempty"`
+	}
+	// 【初始化阶段】数据如下
+	{
+	  "appRevision": "vela-nginx-v1:49549c8a474f1411",
+	  "finished": false,
+	  "message": "Initializing workflow",
+	  "mode": "DAG",
+	  "startTime": "2022-11-02T01:46:56Z",
+	  "suspend": false,
+	  "terminated": false
+	}
+	// 【完成阶段】数据如下
 	{
 	  "appRevision": "vela-nginx-v1:49549c8a474f1411",
 	  "contextBackend": {
@@ -276,8 +303,9 @@ func (w *workflow) restartWorkflow(ctx monitorContext.Context, rev string) (comm
 	if w.dagMode {
 		mode = common.WorkflowModeDAG
 	}
+	// 初始化 application.status.workflow
 	w.app.Status.Workflow = &common.WorkflowStatus{
-		AppRevision: rev,
+		AppRevision: rev, // 关联application revision
 		Mode:        mode,
 		StartTime:   metav1.Now(),
 	}
@@ -290,6 +318,7 @@ func (w *workflow) restartWorkflow(ctx monitorContext.Context, rev string) (comm
 	w.app.Status.AppliedResources = nil
 
 	// clean conditions after render
+	// 移除render后面所有的condition
 	var reservedConditions []condition.Condition
 	for i, cond := range w.app.Status.Conditions {
 		condTpy, err := common.ParseApplicationConditionType(string(cond.Type))
@@ -300,6 +329,7 @@ func (w *workflow) restartWorkflow(ctx monitorContext.Context, rev string) (comm
 		}
 	}
 	w.app.Status.Conditions = reservedConditions
+	// StepStatusCache 上移除当前appliation的缓存
 	StepStatusCache.Delete(fmt.Sprintf("%s-%s", w.app.Name, w.app.Namespace))
 	wfContext.CleanupMemoryStore(w.app.Name, w.app.Namespace)
 	return common.WorkflowStateInitializing, nil
@@ -307,7 +337,7 @@ func (w *workflow) restartWorkflow(ctx monitorContext.Context, rev string) (comm
 
 func newEngine(ctx monitorContext.Context, wfCtx wfContext.Context, w *workflow, wfStatus *common.WorkflowStatus) *engine {
 	stepStatus := make(map[string]common.StepStatus)
-	// wfStatus.Steps => stepStatus
+	// wfStatus.Steps 数组 => stepStatus map
 	setStepStatus(stepStatus, wfStatus.Steps)
 	stepDependsOn := make(map[string][]string)
 	if w.app.Spec.Workflow != nil {
@@ -343,6 +373,7 @@ func newEngine(ctx monitorContext.Context, wfCtx wfContext.Context, w *workflow,
 
 func setStepStatus(statusMap map[string]common.StepStatus, status []common.WorkflowStepStatus) {
 	// 遍历status数组，转map写入到statusMap中
+	// 所有的status拉平后写入到statusMap中
 	for _, ss := range status {
 		statusMap[ss.Name] = ss.StepStatus
 		for _, sss := range ss.SubStepsStatus {
@@ -482,7 +513,10 @@ func (w *workflow) allDone(taskRunners []wfTypes.TaskRunner) (bool, bool) {
 
 func (w *workflow) makeContext(appName string) (wfCtx wfContext.Context, err error) {
 	wfStatus := w.app.Status.Workflow
+	// 第一次执行的时候 context backend为空
 	if wfStatus.ContextBackend != nil {
+		// 根据appName 生成 workflow context对应的configmap的name
+		// 从k8s中根据ns/name取得configmap并加载到workflow context中
 		wfCtx, err = wfContext.LoadContext(w.cli, w.app.Namespace, appName)
 		if err != nil {
 			err = errors.WithMessage(err, "load context")
@@ -506,6 +540,7 @@ func (w *workflow) makeContext(appName string) (wfCtx wfContext.Context, err err
 		return
 	}
 	// 返回workflow context 的 store(configmap) 的 owner references
+	// wfStatus.ContextBackend 字段记录了 workflow configmap对应的owner references。下次执行makeContext的时候会命中LoadContext逻辑
 	wfStatus.ContextBackend = wfCtx.StoreRef()
 	return
 }

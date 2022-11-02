@@ -56,6 +56,7 @@ func newDispatchConfig(options ...DispatchOption) *dispatchConfig {
 
 // Dispatch dispatch resources
 func (h *resourceKeeper) Dispatch(ctx context.Context, manifests []*unstructured.Unstructured, applyOpts []apply.ApplyOption, options ...DispatchOption) (err error) {
+	// 假定 applyOpts 为 nil, options 也为空
 	if h.applyOncePolicy != nil && h.applyOncePolicy.Enable && h.applyOncePolicy.Rules == nil {
 		options = append(options, MetaOnlyOption{})
 	}
@@ -69,7 +70,10 @@ func (h *resourceKeeper) Dispatch(ctx context.Context, manifests []*unstructured
 		return err
 	}
 	// 2. apply manifests
-	opts := []apply.ApplyOption{apply.MustBeControlledByApp(h.app), apply.NotUpdateRenderHashEqual()}
+	opts := []apply.ApplyOption{
+		apply.MustBeControlledByApp(h.app),
+		apply.NotUpdateRenderHashEqual(),
+	}
 	if len(applyOpts) > 0 {
 		opts = append(opts, applyOpts...)
 	}
@@ -133,14 +137,19 @@ func (h *resourceKeeper) record(ctx context.Context, manifests []*unstructured.U
 
 func (h *resourceKeeper) dispatch(ctx context.Context, manifests []*unstructured.Unstructured, applyOpts []apply.ApplyOption) error {
 	// 按照MaxDispatchConcurrent并发度运行函数
-	errs := parallel.Run(func(manifest *unstructured.Unstructured) error {
-		applyCtx := multicluster.ContextWithClusterName(ctx, oam.GetCluster(manifest))
-		applyCtx = auth.ContextWithUserInfo(applyCtx, h.app)
-		ao := applyOpts
-		if h.isShared(manifest) {
-			ao = append([]apply.ApplyOption{apply.SharedByApp(h.app)}, ao...)
-		}
-		return h.applicator.Apply(applyCtx, manifest, ao...)
-	}, manifests, MaxDispatchConcurrent)
+	// 按照MaxDispatchConcurrent并行的对manifests执行回调函数，回调函数只会传入当前manifest
+	errs := parallel.Run(
+		func(manifest *unstructured.Unstructured) error {
+			applyCtx := multicluster.ContextWithClusterName(ctx, oam.GetCluster(manifest))
+			applyCtx = auth.ContextWithUserInfo(applyCtx, h.app)
+			ao := applyOpts
+			if h.isShared(manifest) {
+				ao = append([]apply.ApplyOption{apply.SharedByApp(h.app)}, ao...)
+			}
+			return h.applicator.Apply(applyCtx, manifest, ao...)
+		},
+		manifests,
+		MaxDispatchConcurrent,
+	)
 	return velaerrors.AggregateErrors(errs.([]error))
 }

@@ -203,6 +203,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 	app.Status.SetConditions(condition.ReadyCondition(common.PolicyCondition.String()))
 	r.Recorder.Event(app, event.Normal(velatypes.ReasonPolicyGenerated, velatypes.MessagePolicyGenerated))
 
+	// 算出run applicatino 会产生哪些步骤
 	steps, err := handler.GenerateApplicationSteps(logCtx, app, appParser, appFile, handler.currentAppRev)
 	if err != nil {
 		logCtx.Error(err, "[handle workflow]")
@@ -247,7 +248,10 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 		}
 		return r.gcResourceTrackers(logCtx, handler, common.ApplicationWorkflowTerminated, false, true)
 	case common.WorkflowStateExecuting:
+		// execute steps计算出来步骤为executing, 则会
 		logCtx.Info("Workflow return state=Executing")
+		// gc逻辑还没跟过
+		// 更新application.status.status为"runningWorkflow"
 		_, err = r.gcResourceTrackers(logCtx, handler, common.ApplicationRunningWorkflow, false, true)
 		return r.result(err).requeue(wf.GetBackoffWaitTime()).ret()
 	case common.WorkflowStateSucceeded:
@@ -334,6 +338,7 @@ func (r *Reconciler) gcResourceTrackers(logCtx monitorContext.Context, handler *
 	if !isPatch {
 		return r.result(r.updateStatus(logCtx, handler.app, common.ApplicationRunningWorkflow)).ret()
 	}
+	// 更新application.status状态
 	return r.result(r.patchStatus(logCtx, handler.app, phase)).ret()
 }
 
@@ -577,6 +582,7 @@ func Setup(mgr ctrl.Manager, args core.Args) error {
 }
 
 func updateObservedGeneration(app *v1beta1.Application) {
+	// 保证 application.Status.ObservedGeneration 与 application.Generation 一致
 	if app.Status.ObservedGeneration != app.Generation {
 		app.Status.ObservedGeneration = app.Generation
 	}

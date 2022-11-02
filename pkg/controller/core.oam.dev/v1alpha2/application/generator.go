@@ -354,7 +354,12 @@ func (h *AppHandler) prepareWorkloadAndManifests(ctx context.Context,
 }
 
 func renderComponentsAndTraits(client client.Client, manifest *types.ComponentManifest, appRev *v1beta1.ApplicationRevision, clusterName string, overrideNamespace string, env string) (*unstructured.Unstructured, []*unstructured.Unstructured, error) {
-	readyWorkload, readyTraits, err := assemble.PrepareBeforeApply(manifest, appRev, []assemble.WorkloadOption{assemble.DiscoveryHelmBasedWorkload(context.TODO(), client)})
+	readyWorkload, readyTraits, err := assemble.PrepareBeforeApply(
+		manifest, appRev,
+		[]assemble.WorkloadOption{
+			assemble.DiscoveryHelmBasedWorkload(context.TODO(), client),
+		},
+	)
 	if err != nil {
 		return nil, nil, errors.WithMessage(err, "assemble resources before apply fail")
 	}

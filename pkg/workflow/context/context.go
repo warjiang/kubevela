@@ -54,6 +54,9 @@ var (
 
 // WorkflowContext is workflow context.
 type WorkflowContext struct {
+	// workflow 相关的数据通过 configmap 形式存储, 存储运行 workflow 需要的上下文配置数据
+	// configmap name生成规则为 workflow-{application name}-context
+	// kubectl get configmap/workflow-vela-nginx-context -ojsonpath='{.data}' |jq
 	cli         client.Client
 	store       *corev1.ConfigMap
 	memoryStore *sync.Map
@@ -246,9 +249,21 @@ func (wf *WorkflowContext) sync() error {
 
 // LoadFromConfigMap recover workflow context from configMap.
 func (wf *WorkflowContext) LoadFromConfigMap(cm corev1.ConfigMap) error {
+	/*
+	workflow context的configmap的结构如下：
+	{
+		components: {},
+		vars: {
+			metadata__: {
+				// application metadata
+			}
+		},
+	}
+	*/
 	data := cm.Data
 	componentsJs := map[string]string{}
 
+	// 重新构造 workflow context的components
 	if err := json.Unmarshal([]byte(data[ConfigMapKeyComponents]), &componentsJs); err != nil {
 		return errors.WithMessage(err, "decode components")
 	}
@@ -260,6 +275,7 @@ func (wf *WorkflowContext) LoadFromConfigMap(cm corev1.ConfigMap) error {
 		}
 		wf.components[name] = cm
 	}
+	// 重新构造 workflow context的vars
 	var err error
 	wf.vars, err = value.NewValue(data[ConfigMapKeyVars], nil, "")
 	if err != nil {
@@ -343,11 +359,12 @@ func (comp *ComponentManifest) unmarshal(v string) error {
 
 // NewContext new workflow context without initialize data.
 func NewContext(cli client.Client, ns, app string, appUID types.UID) (Context, error) {
+	// 构造 workflow context 对象
 	wfCtx, err := newContext(cli, ns, app, appUID)
 	if err != nil {
 		return nil, err
 	}
-
+	// commit过程其实就是写入configmap
 	return wfCtx, wfCtx.Commit()
 }
 

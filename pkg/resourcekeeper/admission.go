@@ -48,6 +48,7 @@ func (h *resourceKeeper) AdmissionCheck(ctx context.Context, manifests []*unstru
 }
 
 // ResourceAdmissionHandler defines the handler to validate the admission of resource operation
+// 定义准入检测的接口
 type ResourceAdmissionHandler interface {
 	Validate(ctx context.Context, manifests []*unstructured.Unstructured) error
 }
@@ -59,6 +60,7 @@ type NamespaceAdmissionHandler struct {
 
 // Validate check if cross namespace is available
 func (h *NamespaceAdmissionHandler) Validate(ctx context.Context, manifests []*unstructured.Unstructured) error {
+	// 同namespace准入检测（这里暂时是不检测的）
 	if !AllowCrossNamespaceResource {
 		for _, manifest := range manifests {
 			if manifest.GetNamespace() != h.app.GetNamespace() {
@@ -78,6 +80,7 @@ type ResourceTypeAdmissionHandler struct {
 
 // Validate check if resource type is valid
 func (h *ResourceTypeAdmissionHandler) Validate(ctx context.Context, manifests []*unstructured.Unstructured) error {
+	// 资源类型准入检测（这里暂时也是不检测的）
 	if AllowResourceTypes != "" {
 		if !h.initialized {
 			h.initialized = true

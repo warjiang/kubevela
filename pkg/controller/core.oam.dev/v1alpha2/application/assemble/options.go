@@ -49,9 +49,11 @@ func (fn WorkloadOptionFn) ApplyToWorkload(wl *unstructured.Unstructured,
 // try to get it from K8s cluster.
 // If not found, block down-streaming process until Helm creates the workload successfully.
 func DiscoveryHelmBasedWorkload(ctx context.Context, c client.Reader) WorkloadOption {
-	return WorkloadOptionFn(func(assembledWorkload *unstructured.Unstructured, compDef *v1beta1.ComponentDefinition, resources []*unstructured.Unstructured) error {
-		return discoverHelmModuleWorkload(ctx, c, assembledWorkload, compDef, resources)
-	})
+	return WorkloadOptionFn(
+		func(assembledWorkload *unstructured.Unstructured, compDef *v1beta1.ComponentDefinition, resources []*unstructured.Unstructured) error {
+			return discoverHelmModuleWorkload(ctx, c, assembledWorkload, compDef, resources)
+		},
+	)
 }
 
 func discoverHelmModuleWorkload(ctx context.Context, c client.Reader, assembledWorkload *unstructured.Unstructured,

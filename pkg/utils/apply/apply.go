@@ -149,11 +149,14 @@ func filterRecordForSpecial(desired client.Object) bool {
 
 // Apply applies new state to an object or create it if not exist
 func (a *APIApplicator) Apply(ctx context.Context, desired client.Object, ao ...ApplyOption) error {
+	// 根据 desired 生成 hash值
 	_, err := generateRenderHash(desired)
 	if err != nil {
 		return err
 	}
-	applyAct := &applyAction{updateAnnotation: filterRecordForSpecial(desired)}
+	applyAct := &applyAction{
+		updateAnnotation: filterRecordForSpecial(desired),
+	}
 	existing, err := a.createOrGetExisting(ctx, applyAct, a.c, desired, ao...)
 	if err != nil {
 		return err
@@ -183,6 +186,7 @@ func (a *APIApplicator) Apply(ctx context.Context, desired client.Object, ao ...
 	return errors.Wrapf(a.c.Patch(ctx, desired, patch), "cannot patch object")
 }
 
+// generateRenderHash 当前k8s对象上计算hash值，并设置到"oam.dev/render-hash"的label上
 func generateRenderHash(desired client.Object) (string, error) {
 	// 往 client.Object的 label 上写入 "oam.dev/render-hash" = utils.ComputeSpecHash(desired)
 	if desired == nil {
@@ -267,6 +271,7 @@ func executeApplyOptions(act *applyAction, existing, desired client.Object, aos 
 // NotUpdateRenderHashEqual if the render hash of new object equal to the old hash, should not apply.
 func NotUpdateRenderHashEqual() ApplyOption {
 	return func(act *applyAction, existing, desired client.Object) error {
+		// render hash 值相等情况应该跳过更新
 		if existing == nil || desired == nil || act.isShared {
 			return nil
 		}
@@ -308,6 +313,7 @@ func MustBeControllableBy(u types.UID) ApplyOption {
 // MustBeControlledByApp requires that the new object is controllable by versioned resourcetracker
 func MustBeControlledByApp(app *v1beta1.Application) ApplyOption {
 	return func(act *applyAction, existing, _ client.Object) error {
+		// 检查 existing 是否是被 app控制(检测标签的 "app.oam.dev/name" 和 "app.oam.dev/namespace" )
 		if existing == nil || act.isShared {
 			return nil
 		}
@@ -315,6 +321,7 @@ func MustBeControlledByApp(app *v1beta1.Application) ApplyOption {
 		// if the existing object has no resource version, it means this resource is an API response not directly from
 		// an etcd object but from some external services, such as vela-prism. Then the response does not necessarily
 		// contain the owner
+		// 未开启 "LegacyResourceOwnerValidation" 情况下，如果 controlledBy 为空且当前对象不为空则报错
 		if controlledBy == "" && !utilfeature.DefaultMutableFeatureGate.Enabled(features.LegacyResourceOwnerValidation) && existing.GetResourceVersion() != "" {
 			return fmt.Errorf("%s %s/%s exists but not managed by any application now", existing.GetObjectKind().GroupVersionKind().Kind, existing.GetNamespace(), existing.GetName())
 		}

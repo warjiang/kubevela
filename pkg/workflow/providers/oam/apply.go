@@ -114,6 +114,7 @@ func (p *provider) applyComponent(_ wfContext.Context, v *value.Value, act wfTyp
 	}
 
 	for _, trait := range traits {
+		// "trait.oam.dev/resource"
 		name := trait.GetLabels()[oam.TraitResource]
 		if name != "" {
 			if err := v.FillObject(trait.Object, "outputs", name); err != nil {
