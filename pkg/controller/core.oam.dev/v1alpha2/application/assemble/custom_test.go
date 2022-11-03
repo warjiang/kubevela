@@ -126,3 +126,14 @@ func (s *AssembleTestSuite) TestAssemble() {
 	}
 	s.Assert().Equal(wantScopeRef, wlScope, "should have correct scopeRef")
 }
+
+func (s *AssembleTestSuite) TestAssembleVela() {
+	appRev := &v1beta1.ApplicationRevision{}
+	b, err := os.ReadFile("./testdata/vela-apprev.yaml")
+	err = yaml.Unmarshal(b, appRev)
+	s.Assert().Nil(err, "should not have error when unmarshal appRevision")
+
+	ao := NewAppManifests(appRev, appParser)
+	allResources, err := ao.AssembledManifests()
+	s.T().Log(len(allResources))
+}
