@@ -36,7 +36,7 @@ var _ = Describe("Test Assemble Options", func() {
 			compName  = "test-comp"
 			namespace = "default"
 		)
-
+		// 读文件构造 v1beta1.ApplicationRevision
 		appRev := &v1beta1.ApplicationRevision{}
 		b, err := os.ReadFile("./testdata/apprevision.yaml")
 		/* appRevision test data is generated based on below application

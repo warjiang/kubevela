@@ -110,7 +110,7 @@ func (am *AppManifests) AssembledManifests() ([]*unstructured.Unstructured, erro
 		ts := am.assembledTraits[compName]
 		for _, t := range ts {
 			r = append(r, t.DeepCopy())
-			if v := t.GetLabels()[oam.LabelManageWorkloadTrait]; v == "true" {
+			if v := t.GetLabels()[oam.LabelManageWorkloadTrait]; v == "true" { // "trait.oam.dev/manage-workload"
 				skipApplyWorkload = true
 			}
 		}
@@ -145,16 +145,20 @@ func (am *AppManifests) GroupAssembledManifests() (
 	map[string]*unstructured.Unstructured,
 	map[string][]*unstructured.Unstructured,
 	map[corev1.ObjectReference][]corev1.ObjectReference, error) {
+	// assemble 已经被标记结束了, 不允许重新执行, 防止重复执行
 	if !am.finalized {
 		am.assemble()
 	}
+	// assemble 过程异常, 返回
 	if am.err != nil {
 		return nil, nil, nil, am.err
 	}
+	// 遍历 AppManifests 上所有的 assembledWorkloads 深拷贝到 workloads 数组中
 	workloads := make(map[string]*unstructured.Unstructured)
 	for k, wl := range am.assembledWorkloads {
 		workloads[k] = wl.DeepCopy()
 	}
+	// traints 同上
 	traits := make(map[string][]*unstructured.Unstructured)
 	for k, ts := range am.assembledTraits {
 		traits[k] = make([]*unstructured.Unstructured, len(ts))
@@ -212,6 +216,7 @@ func (am *AppManifests) assemble() {
 			am.referencedScopes[workloadRef][i] = *scope
 		}
 	}
+	// 标记 AppManifests assemble 过程结束
 	am.finalizeAssemble(nil)
 }
 
@@ -245,11 +250,13 @@ func PrepareBeforeApply(comp *types.ComponentManifest, appRev *v1beta1.Applicati
 
 func (am *AppManifests) complete() error {
 	if len(am.componentManifests) == 0 {
+		// 根据 ApplicationRevision 构造 appfile.Appfile 对象
 		var err error
 		af, err := am.parser.GenerateAppFileFromRevision(am.AppRevision)
 		if err != nil {
 			return errors.WithMessage(err, "fail to generate appfile from revision for app manifests complete")
 		}
+		// Appfile 生成 ComponentManifests 数组
 		am.componentManifests, err = af.GenerateComponentManifests()
 		if err != nil {
 			return errors.WithMessage(err, "fail to complete manifests as generate from app revision failed")
@@ -268,6 +275,7 @@ func (am *AppManifests) complete() error {
 	return nil
 }
 
+// finalizeAssemble 标记 AppManifests assemble完成, 如果 assemble 过程发生异常，则会将异常信息记录到 AppManifests.err 中
 func (am *AppManifests) finalizeAssemble(err error) {
 	am.finalized = true
 	if err == nil {

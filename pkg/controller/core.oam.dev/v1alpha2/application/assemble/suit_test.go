@@ -59,6 +59,15 @@ func TestAssemble(t *testing.T) {
 }
 
 var _ = BeforeSuite(func(done Done) {
+	/*
+	基于 k8s sig 提供的 envtest 构造一个完整的测试环境, 包括
+	1. 构造 envtest.Environment 对象(重点关注crd相关的配置)
+	2. 构造 rest.Config
+	3. 构造 runtime.Scheme, 并将crd关联的各个版本的schema注册到runtime.Scheme中
+	4. 构造 client.Client 用于操作k8s集群对象
+	5. 构造 discoverymapper.DiscoveryMapper 用于发现集群的schema、完成gvk到gvr的映射关系
+	6. 构造 appfile.Parser 用于构造 appfile.Appfile 对象
+	*/
 	logf.SetLogger(zap.New(zap.UseDevMode(true), zap.WriteTo(GinkgoWriter)))
 	rand.Seed(time.Now().UnixNano())
 	By("bootstrapping test environment")

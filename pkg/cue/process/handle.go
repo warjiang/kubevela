@@ -150,6 +150,7 @@ func (ctx *templateContext) SetParameters(params map[string]interface{}) {
 
 // SetBase set templateContext base model
 func (ctx *templateContext) SetBase(base model.Instance) error {
+	// 执行玩所有的baseHooks之后, 把base设置到ctx上
 	for _, hook := range ctx.baseHooks {
 		if err := hook.Exec(ctx, base); err != nil {
 			return errors.Wrap(err, "cannot set base into context")
@@ -170,7 +171,25 @@ func (ctx *templateContext) AppendAuxiliaries(auxiliaries ...Auxiliary) error {
 	return nil
 }
 
-// BaseContextFile return cue format string of templateContext
+/*
+BaseContextFile return cue format string of templateContext
+https://kubevela.net/zh/docs/platform-engineers/oam/x-definition#%E6%A8%A1%E5%9D%97%E5%AE%9A%E4%B9%89%E8%BF%90%E8%A1%8C%E6%97%B6%E4%B8%8A%E4%B8%8B%E6%96%87
+context.appName 				应用的名字
+context.appRevision 			应用当前的实例对应的版本名称
+context.appRevisionNum			应用当前的实例对应的版本数字
+context.namespace				应用当前实例所在的命名空间
+context.revision				[KUBEVELA_COMPONENT_REVISION_PLACEHOLDER] 当前组件实例的版本名称
+context.workflowName
+context.publishVersion
+context.parameter				当前组件实例的参数，可以在运维特征中获得组件的参数
+context.output					当前组件实例化后的对象结构体
+context.outputs.<resourceName>	当前组件和运维特征实例化以后的结构体
+context.name					应用当前实例对应的名称
+context.namespace				应用当前实例所在的命名空间
+context.appLabels				应用当前实例的标签
+context.appAnnotations			应用当前实例的注释
+
+*/
 func (ctx *templateContext) BaseContextFile() (string, error) {
 	/*
 		// 构造基础context对象

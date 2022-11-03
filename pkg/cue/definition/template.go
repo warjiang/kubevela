@@ -38,9 +38,9 @@ import (
 
 const (
 	// OutputFieldName is the name of the struct contains the CR data
-	OutputFieldName = model.OutputFieldName
+	OutputFieldName = model.OutputFieldName // output
 	// OutputsFieldName is the name of the struct contains the map[string]CR data
-	OutputsFieldName = model.OutputsFieldName
+	OutputsFieldName = model.OutputsFieldName // outputs
 	// PatchFieldName is the name of the struct contains the patch of CR data
 	PatchFieldName = "patch"
 	// PatchOutputsFieldName is the name of the struct contains the patch of outputs CR data
@@ -85,7 +85,12 @@ func NewWorkloadAbstractEngine(name string, pd *packages.PackageDiscover) Abstra
 	}
 }
 
-// Complete do workload definition's rendering
+/*
+Complete do workload definition's rendering
+ctx => process.templateContext
+abstractTemplate => workload中FullTemplate.TemplateStr
+params => workload中Params
+*/
 func (wd *workloadDef) Complete(ctx process.Context, abstractTemplate string, params interface{}) error {
 	bi := build.NewContext().NewInstance("", nil)
 	if err := bi.AddFile("-", abstractTemplate); err != nil {
@@ -127,7 +132,7 @@ func (wd *workloadDef) Complete(ctx process.Context, abstractTemplate string, pa
 	if err := inst.Value().Validate(); err != nil {
 		return errors.WithMessagef(err, "invalid cue template of workload %s after merge parameter and context", wd.name)
 	}
-	// 从cue模板计算出来的值中获取output字段
+	// 从cue模板计算出来的值中获取[output]字段
 	output := inst.Lookup(OutputFieldName)
 	base, err := model.NewBase(output)
 	if err != nil {
@@ -140,7 +145,7 @@ func (wd *workloadDef) Complete(ctx process.Context, abstractTemplate string, pa
 	// we will support outputs for workload composition, and it will become trait in AppConfig.
 	// 解析 outputs 字段
 	outputs := inst.Lookup(OutputsFieldName)
-	if !outputs.Exists() {
+	if !outputs.Exists() {// 没有outputs了, 跳过后续流程
 		return nil
 	}
 	st, err := outputs.Struct()
@@ -156,7 +161,11 @@ func (wd *workloadDef) Complete(ctx process.Context, abstractTemplate string, pa
 		if err != nil {
 			return errors.WithMessagef(err, "invalid outputs(%s) of workload %s", fieldInfo.Name, wd.name)
 		}
-		if err := ctx.AppendAuxiliaries(process.Auxiliary{Ins: other, Type: AuxiliaryWorkload, Name: fieldInfo.Name}); err != nil {
+		if err := ctx.AppendAuxiliaries(process.Auxiliary{
+			Ins: other,
+			Type: AuxiliaryWorkload,
+			Name: fieldInfo.Name,
+		}); err != nil {
 			return err
 		}
 	}
@@ -340,7 +349,7 @@ func (td *traitDef) Complete(ctx process.Context, abstractTemplate string, param
 	}
 	// 从cue的结果中找到processing字段
 	processing := inst.Lookup("processing")
-	if processing.Exists() {
+	if processing.Exists() { // processing 字段存在, 则执行 task.Process
 		if inst, err = task.Process(inst); err != nil {
 			return errors.WithMessagef(err, "invalid process of trait %s", td.name)
 		}
@@ -367,7 +376,7 @@ func (td *traitDef) Complete(ctx process.Context, abstractTemplate string, param
 		}
 	}
 	// patch
-	patcher := inst.Lookup(PatchFieldName)
+	patcher := inst.Lookup(PatchFieldName) // patch
 	base, auxiliaries := ctx.Output()
 	if patcher.Exists() {
 		p, err := model.NewOther(patcher)
@@ -379,7 +388,7 @@ func (td *traitDef) Complete(ctx process.Context, abstractTemplate string, param
 		}
 	}
 	// patchOutputs
-	outputsPatcher := inst.Lookup(PatchOutputsFieldName)
+	outputsPatcher := inst.Lookup(PatchOutputsFieldName) // patchOutputs
 	if outputsPatcher.Exists() {
 		for _, auxiliary := range auxiliaries {
 			target := outputsPatcher.Lookup(auxiliary.Name)
@@ -418,14 +427,15 @@ func parseErrors(errs cue.Value) error {
 
 // GetCommonLabels will convert context based labels to OAM standard labels
 func GetCommonLabels(contextLabels map[string]string) map[string]string {
+	// ctx上的base labels转换oam标准的labels
 	var commonLabels = map[string]string{}
 	for k, v := range contextLabels {
 		switch k {
-		case model.ContextAppName:
+		case model.ContextAppName: // appName -> app.oam.dev/name
 			commonLabels[oam.LabelAppName] = v
-		case model.ContextName:
+		case model.ContextName: // name -> app.oam.dev/component
 			commonLabels[oam.LabelAppComponent] = v
-		case model.ContextAppRevision:
+		case model.ContextAppRevision: // appRevision -> app.oam.dev/appRevision
 			commonLabels[oam.LabelAppRevision] = v
 		}
 	}

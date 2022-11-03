@@ -154,10 +154,14 @@ func LoadTemplate(ctx context.Context, dm discoverymapper.DiscoveryMapper, cli c
 }
 
 // LoadTemplateFromRevision will load Definition template from app revision
+// 根据 capType/capName 从 apprev 解析出对应的 definition并构造出template
 func LoadTemplateFromRevision(capName string, capType types.CapType, apprev *v1beta1.ApplicationRevision, dm discoverymapper.DiscoveryMapper) (*Template, error) {
 	if apprev == nil {
 		return nil, errors.Errorf("fail to find template for %s as app revision is empty", capName)
 	}
+	// 1. verifyRevisionName 函数返回无版本信息的capName
+	// 2. 根据 capType/capName 从 ApplicationRevision 上查找对应的 definition
+	// 3. 根据 definition 构造 template
 	capName = verifyRevisionName(capName, capType, apprev)
 	switch capType {
 	case types.TypeComponentDefinition:
@@ -237,7 +241,10 @@ func LoadTemplateFromRevision(capName string, capType types.CapType, apprev *v1b
 	}
 }
 
+// verifyRevisionName 在 ApplicationRevision 上检查 capType 对应的 definitions map 上是否存在 capName的definition
 func verifyRevisionName(capName string, capType types.CapType, apprev *v1beta1.ApplicationRevision) string {
+	// capName: webservice 或者 webservice@v1.0.0
+	// capType: ComponentDefinition
 	if strings.Contains(capName, "@") {
 		splitName := capName[0:strings.LastIndex(capName, "@")]
 		ok := false
@@ -319,6 +326,7 @@ func newTemplateOfCompDefinition(compDef *v1beta1.ComponentDefinition) (*Templat
 	if err := loadSchematicToTemplate(tmpl, compDef.Spec.Status, compDef.Spec.Schematic, compDef.Spec.Extension); err != nil {
 		return nil, errors.WithMessage(err, "cannot load template")
 	}
+	// terraform 单独处理
 	if compDef.Annotations["type"] == string(types.TerraformCategory) {
 		tmpl.CapabilityCategory = types.TerraformCategory
 	}
@@ -377,6 +385,7 @@ func newTemplateOfScopeDefinition(def *v1beta1.ScopeDefinition) (*Template, erro
 }
 
 // loadSchematicToTemplate loads common data that all kind definitions have.
+// 加载所有 definition 都有的一般性字段到template上
 func loadSchematicToTemplate(tmpl *Template, status *common.Status, schematic *common.Schematic, ext *runtime.RawExtension) error {
 	if status != nil {
 		tmpl.CustomStatus = status.CustomStatus

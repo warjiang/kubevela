@@ -123,7 +123,12 @@ func NewOther(v cue.Value) (Instance, error) {
 }
 
 func openPrint(v cue.Value) (string, error) {
-	sysopts := []cue.Option{cue.All(), cue.DisallowCycles(true), cue.ResolveReferences(true), cue.Docs(true)}
+	sysopts := []cue.Option{
+		cue.All(),
+		cue.DisallowCycles(true),
+		cue.ResolveReferences(true),
+		cue.Docs(true),
+	}
 	f, err := sets.ToFile(v.Syntax(sysopts...))
 	if err != nil {
 		return "", err

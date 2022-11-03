@@ -185,8 +185,8 @@ func (p *Parser) newAppfile(appName, ns string, app *v1beta1.Application) *Appfi
 		Name:      appName,
 		Namespace: ns,
 
-		AppLabels:                      make(map[string]string),
-		AppAnnotations:                 make(map[string]string),
+		AppLabels:                      make(map[string]string), // 深拷贝 application 的 labels
+		AppAnnotations:                 make(map[string]string), // 深拷贝 application 的 annotations
 		RelatedTraitDefinitions:        make(map[string]*v1beta1.TraitDefinition),
 		RelatedComponentDefinitions:    make(map[string]*v1beta1.ComponentDefinition),
 		RelatedScopeDefinitions:        make(map[string]*v1beta1.ScopeDefinition),
@@ -247,9 +247,8 @@ func (p *Parser) isLatestPublishVersion(ctx context.Context, app *v1beta1.Applic
 }
 
 // inheritLabelAndAnnotationFromAppRev is a compatible function, that we can't record metadata for application object in AppRev
+// 兼容无法在ApplicationRevision上存储application.metadata的情况
 func inheritLabelAndAnnotationFromAppRev(appRev *v1beta1.ApplicationRevision) {
-	// 兼容无法在ApplicationRevision上存储application.metadata的情况
-
 	// application.Spec.Application上已经存在Annotation和Label, 说明能写，并不需要兼容，忽略
 	if len(appRev.Spec.Application.Annotations) > 0 || len(appRev.Spec.Application.Labels) > 0 {
 		return
@@ -284,7 +283,7 @@ func (p *Parser) GenerateAppFileFromRevision(appRev *v1beta1.ApplicationRevision
 	// ApplicationRevision 可以看做是 Application 的一个快照, inheritLabelAndAnnotationFromAppRev 用来兼容 Application 上存储
 	// 数据存在部分丢失的情况, 比如Application上的Labels或者Annotation丢失后可以从最新的ApplicationRevision上推断出来
 	inheritLabelAndAnnotationFromAppRev(appRev)
-
+	// 深拷贝 application 对象
 	app := appRev.Spec.Application.DeepCopy()
 	ns := app.Namespace
 	appName := app.Name
@@ -310,6 +309,7 @@ func (p *Parser) GenerateAppFileFromRevision(appRev *v1beta1.ApplicationRevision
 	}
 	appfile.Workloads = wds
 	appfile.Components = app.Spec.Components
+	// 生成 workflowsteps 到 appfile上
 	if err := p.parseWorkflowStepsFromRevision(context.Background(), appfile); err != nil {
 		return nil, errors.Wrapf(err, "failed to parseWorkflowStepsFromRevision")
 	}
@@ -319,7 +319,7 @@ func (p *Parser) GenerateAppFileFromRevision(appRev *v1beta1.ApplicationRevision
 	if err := p.parseReferredObjectsFromRevision(appfile); err != nil {
 		return nil, errors.Wrapf(err, "failed to parseReferredObjects")
 	}
-
+	// 依次把 applicationRevision中的componentdefinition, traitdefinition, workflowstepdefinition, scopedefinition 复制到appfile中
 	for k, v := range appRev.Spec.ComponentDefinitions {
 		appfile.RelatedComponentDefinitions[k] = v.DeepCopy()
 	}
@@ -331,6 +331,8 @@ func (p *Parser) GenerateAppFileFromRevision(appRev *v1beta1.ApplicationRevision
 	}
 
 	// add compatible code for upgrading to v1.3 as the workflow steps were not recorded before v1.2
+	// 兼容代码，1.2往1.3升级的时候application.Revision中的workflowStepDefinition为空, 从apiserver中补齐相关的workflowStepDefinition，回填到appfile.RelatedWorkflowStepDefinitions
+	// 同时回写到 applicationRevision中
 	if len(appfile.RelatedWorkflowStepDefinitions) == 0 && len(appfile.WorkflowSteps) > 0 {
 		ctx := context.Background()
 		for _, workflowStep := range appfile.WorkflowSteps {
@@ -360,6 +362,7 @@ func (p *Parser) GenerateAppFileFromRevision(appRev *v1beta1.ApplicationRevision
 	return appfile, nil
 }
 
+// parseReferredObjectsFromRevision ApplicationRevision.Spec中的ReferencedResources 反序列化后存储到 appfile.ReferredObjects 中
 func (p *Parser) parseReferredObjectsFromRevision(af *Appfile) error {
 	af.ReferredObjects = []*unstructured.Unstructured{}
 	for _, obj := range af.AppRevision.Spec.ReferredObjects {
@@ -608,6 +611,7 @@ func (p *Parser) makeWorkload(ctx context.Context, name, typ string, capType typ
 	return p.convertTemplate2Workload(name, typ, props, templ)
 }
 
+// makeWorkloadFromRevision
 func (p *Parser) makeWorkloadFromRevision(name, typ string, capType types.CapType, props *runtime.RawExtension, appRev *v1beta1.ApplicationRevision) (*Workload, error) {
 	templ, err := LoadTemplateFromRevision(typ, capType, appRev, p.dm)
 	if err != nil {
@@ -873,6 +877,7 @@ func GetScopeDefAndGVK(ctx context.Context, cli client.Reader, dm discoverymappe
 }
 
 // GetScopeDefAndGVKFromRevision get grouped API version of the given scope
+// 从 ApplicationRevision 中解析出 scopedefinition和gvk 信息
 func GetScopeDefAndGVKFromRevision(name string, appRev *v1beta1.ApplicationRevision) (*v1beta1.ScopeDefinition, metav1.GroupVersionKind, error) {
 	var gvk metav1.GroupVersionKind
 	// 根据scope name从ApplicationRevision中获取ScopeDefinition

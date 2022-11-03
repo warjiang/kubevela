@@ -34,7 +34,7 @@ import (
 func LoadExternalPoliciesForWorkflow(ctx context.Context, cli client.Client, appNs string, steps []v1beta1.WorkflowStep, internalPolicies []v1beta1.AppPolicy) ([]v1beta1.AppPolicy, error) {
 	// internalPolicies 作个副本到 policies, 遍历policies数组，完成数组转map操作
 	policies := internalPolicies
-	policyMap := map[string]struct{}{}
+	policyMap := map[string]struct{}{} // 承担快速去重的作用
 	for _, policy := range policies {
 		// 传入的policies是application.Spec上定义的polocies
 		policyMap[policy.Name] = struct{}{}
@@ -58,6 +58,7 @@ func LoadExternalPoliciesForWorkflow(ctx context.Context, cli client.Client, app
 	for _, _step := range steps {
 		// 只关心type=deploy且Properties不为空的step
 		if _step.Type == DeployWorkflowStep && _step.Properties != nil {
+			// deploy 类型的 step 需要额外判断 policy 是否在 policyMap 中, 不存在情况下需要从 apiserver 中获取，并追加写入到 policies 中
 			props := DeployWorkflowStepSpec{}
 			if err := utils.StrictUnmarshal(_step.Properties.Raw, &props); err != nil {
 				return nil, errors.Wrapf(err, "invalid WorkflowStep %s", _step.Name)

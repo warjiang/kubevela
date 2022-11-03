@@ -322,7 +322,7 @@ func (af *Appfile) SetOAMContract(comp *types.ComponentManifest) error {
 		Kind:       comp.StandardWorkload.GetKind(),
 		Name:       comp.StandardWorkload.GetName(),
 	}
-	for _, trait := range comp.Traits {
+	for _, trait := range comp.Traits { // 遍历所有的traits，设置trait的owner reference
 		af.assembleTrait(trait, compName, commonLabels)
 		if err := af.setWorkloadRefToTrait(workloadRef, trait); err != nil {
 			return errors.WithMessagef(err, "cannot set workload reference to trait %q", trait.GetName())
@@ -461,13 +461,13 @@ func (af *Appfile) setWorkloadRefToTrait(wlRef corev1.ObjectReference, trait *un
 	}
 	workloadRefPath := traitDef.Spec.WorkloadRefPath
 	// only add workload reference to the trait if it asks for it
-	if len(workloadRefPath) != 0 {
+	if len(workloadRefPath) != 0 { // workload ref path 不为空情况下才设置
 		tmpWLRef := corev1.ObjectReference{
 			APIVersion: wlRef.APIVersion,
 			Kind:       wlRef.Kind,
 			Name:       wlRef.Name,
 		}
-		if err := fieldpath.Pave(trait.UnstructuredContent()).SetValue(workloadRefPath, tmpWLRef); err != nil {
+		if err := fieldpath.Pave(trait.UnstructuredContent()).SetValue(workloadRefPath, tmpWLRef); err != nil { // 给当前trait按照workloadRefPath设置workloadRef
 			return err
 		}
 	}
@@ -480,7 +480,7 @@ func PrepareProcessContext(wl *Workload, ctxData process.ContextData) (process.C
 	if wl.Ctx == nil {
 		wl.Ctx = NewBasicContext(ctxData, wl.Params)
 	}
-	// 计算结果
+	// 计算结果，计算结果最后会挂载wl.Ctx上
 	if err := wl.EvalContext(wl.Ctx); err != nil {
 		return nil, errors.Wrapf(err, "evaluate base template app=%s in namespace=%s", ctxData.AppName, ctxData.Namespace)
 	}
@@ -489,6 +489,7 @@ func PrepareProcessContext(wl *Workload, ctxData process.ContextData) (process.C
 
 // NewBasicContext prepares a basic DSL process Context
 func NewBasicContext(contextData process.ContextData, params map[string]interface{}) process.Context {
+	// process.ContextData 转 process.Context
 	pCtx := process.NewContext(contextData)
 	if params != nil {
 		pCtx.SetParameters(params)
@@ -511,7 +512,7 @@ func generateComponentFromTerraformModule(wl *Workload, appName, ns string) (*ty
 func baseGenerateComponent(pCtx process.Context, wl *Workload, appName, ns string) (*types.ComponentManifest, error) {
 	var err error
 	pCtx.PushData(model.ContextComponentType, wl.Type)
-	for _, tr := range wl.Traits {
+	for _, tr := range wl.Traits { // 遍历计算所有的trait
 		if err := tr.EvalContext(pCtx); err != nil {
 			return nil, errors.Wrapf(err, "evaluate template trait=%s app=%s", tr.Name, wl.Name)
 		}
@@ -592,7 +593,7 @@ func makeWorkloadWithContext(pCtx process.Context, wl *Workload, ns, appName str
 // evalWorkloadWithContext evaluate the workload's template to generate component manifest
 func evalWorkloadWithContext(pCtx process.Context, wl *Workload, ns, appName, compName string) (*types.ComponentManifest, error) {
 	compManifest := &types.ComponentManifest{}
-	workload, err := makeWorkloadWithContext(pCtx, wl, ns, appName)
+	workload, err := makeWorkloadWithContext(pCtx, wl, ns, appName) // 获取base数据, 转换成unstructured.Unstructured 类型 workload
 	if err != nil {
 		return nil, err
 	}
@@ -601,8 +602,8 @@ func evalWorkloadWithContext(pCtx process.Context, wl *Workload, ns, appName, co
 	_, assists := pCtx.Output() // 处理所有的outputs产物
 	compManifest.Traits = make([]*unstructured.Unstructured, len(assists))
 	commonLabels := definition.GetCommonLabels(pCtx.BaseContextLabels())
-	for i, assist := range assists {
-		tr, err := assist.Ins.Unstructured()
+	for i, assist := range assists { // 遍历所有outputs对象
+		tr, err := assist.Ins.Unstructured() // 转换成unstructured.Unstructured 对象
 		if err != nil {
 			return nil, errors.Wrapf(err, "evaluate trait=%s template for component=%s app=%s", assist.Name, compName, appName)
 		}
@@ -868,7 +869,7 @@ func generateComponentFromHelmModule(wl *Workload, ctxData process.ContextData) 
 
 // GenerateContextDataFromAppFile generates process context data from app file
 func GenerateContextDataFromAppFile(appfile *Appfile, wlName string) process.ContextData {
-	// 根据appfile构造ContextData, 用于后续的模板渲染
+	// 根据appfile构造ContextData, 后续的模板渲染中可以取到ctx上的数据
 	data := process.ContextData{
 		Namespace:       appfile.Namespace,
 		AppName:         appfile.Name,
@@ -918,6 +919,7 @@ func (af *Appfile) PolicyClient(cli client.Client) client.Client {
 	return velaclient.DelegatingHandlerClient{
 		Client: cli,
 		Getter: func(ctx context.Context, key client.ObjectKey, obj client.Object) error {
+			// 拦截了get函数, 如果预期获取的obj是v1alpha1.Policy类型,则优先从 ExternalPolicies 查找, 找不到再从k8s apiserver获取
 			if po, ok := obj.(*v1alpha1.Policy); ok {
 				if af.AppRevision != nil {
 					if p, found := af.ExternalPolicies[key.String()]; found {
@@ -932,6 +934,7 @@ func (af *Appfile) PolicyClient(cli client.Client) client.Client {
 				af.ExternalPolicies[key.String()] = obj.(*v1alpha1.Policy)
 				return nil
 			}
+			// 非v1alpha1.Policy类型资源直接从k8s apiserver获取
 			return cli.Get(ctx, key, obj)
 		},
 	}
