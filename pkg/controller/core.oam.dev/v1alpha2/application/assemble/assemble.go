@@ -104,6 +104,7 @@ func (am *AppManifests) AssembledManifests() ([]*unstructured.Unstructured, erro
 	if am.err != nil {
 		return nil, am.err
 	}
+	// 对生成出来的资源执行一次重排（拉平，排列）
 	r := make([]*unstructured.Unstructured, 0)
 	for compName, wl := range am.assembledWorkloads {
 		skipApplyWorkload := false
@@ -182,6 +183,7 @@ func checkAutoDetectComponent(wl *unstructured.Unstructured) bool {
 }
 
 func (am *AppManifests) assemble() {
+	// 内部会完成cue模板的计算，对应的workload的资源都在这一步完成计算
 	if err := am.complete(); err != nil {
 		am.finalizeAssemble(err)
 		return
